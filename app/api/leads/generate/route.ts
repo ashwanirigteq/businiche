@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from '@/lib/auth';
-import { generateAndSaveLeads } from '@/lib/places';
+import { discoverGooglePlacesLeads } from '@/lib/places';
 
 export async function POST(request: Request) {
   try {
@@ -33,17 +33,18 @@ export async function POST(request: Request) {
       );
     }
 
-    const leadLimit = Math.min(Math.max(Number(limit) || 10, 1), 20);
+    const leadLimit = Math.min(Math.max(Number(limit) || 10, 1), 100);
 
-    const result = await generateAndSaveLeads(niche, location, leadLimit);
+    // Discover in-memory leads WITHOUT auto-saving
+    const result = await discoverGooglePlacesLeads(niche, location, leadLimit);
 
     return NextResponse.json({
       success: true,
-      message: `Discovered ${result.totalFound} places: ${result.insertedCount} new leads saved, ${result.duplicatesCount} duplicate leads skipped.`,
+      message: `Discovered ${result.totalFound} businesses matching "${niche}" in "${location}". Leads are ready to review and save.`,
       ...result,
     });
   } catch (err: unknown) {
-    console.error('Lead generation error:', err);
+    console.error('Lead discovery error:', err);
     const message = err instanceof Error ? err.message : 'An unexpected error occurred during lead discovery.';
     return NextResponse.json(
       { error: message },

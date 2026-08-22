@@ -132,23 +132,6 @@ export default function LoginPage() {
         <Suspense fallback={<div className="bg-white p-8 rounded-2xl border border-slate-200 animate-pulse h-64" />}>
           <LoginForm />
         </Suspense>
-
-        {/* Demo Seed Accounts Info Card */}
-        <div className="mt-6 p-4 rounded-xl bg-slate-100/70 border border-slate-200/80 text-xs text-slate-600 space-y-1.5">
-          <p className="font-semibold text-slate-700">Pre-seeded Demo Credentials:</p>
-          <div className="grid grid-cols-2 gap-2 pt-1 font-mono text-[11px]">
-            <div className="bg-white p-2 rounded border border-slate-200">
-              <span className="font-bold text-slate-800">Admin</span>
-              <div className="text-slate-500">user: <span className="text-slate-900">admin</span></div>
-              <div className="text-slate-500">pass: <span className="text-slate-900">AdminPass123!</span></div>
-            </div>
-            <div className="bg-white p-2 rounded border border-slate-200">
-              <span className="font-bold text-slate-800">User</span>
-              <div className="text-slate-500">user: <span className="text-slate-900">user</span></div>
-              <div className="text-slate-500">pass: <span className="text-slate-900">UserPass123!</span></div>
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   );

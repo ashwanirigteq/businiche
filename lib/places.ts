@@ -1,5 +1,5 @@
 import { sql } from './db';
-import type { Lead, LeadGenerationResult } from './types';
+import type { Lead, DiscoveredLead, LeadDiscoveryResult } from './types';
 
 interface NormalizedPlace {
   place_id: string;
@@ -7,6 +7,7 @@ interface NormalizedPlace {
   formatted_address?: string;
   website?: string;
   phone?: string;
+  email?: string;
   source_url?: string;
 }
 
@@ -38,51 +39,68 @@ async function fetchLegacyPlaceDetails(placeId: string, apiKey: string): Promise
 }
 
 /**
- * Search Google Places using Places API (New)
+ * Search Google Places using Places API (New) with pagination up to requested limit (e.g. 10, 20, 50, 100)
  */
 async function searchPlacesNew(query: string, apiKey: string, limit: number): Promise<NormalizedPlace[]> {
   const url = 'https://places.googleapis.com/v1/places:searchText';
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Goog-Api-Key': apiKey,
-      'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.nationalPhoneNumber,places.internationalPhoneNumber,places.websiteUri,places.googleMapsUri',
-    },
-    body: JSON.stringify({
+  const targetLimit = Math.min(Math.max(limit, 1), 100);
+  const results: NormalizedPlace[] = [];
+  let pageToken: string | undefined = undefined;
+
+  // Loop pages until we reach targetLimit or no more results
+  while (results.length < targetLimit) {
+    const pageSize = Math.min(targetLimit - results.length, 20);
+    const bodyPayload: Record<string, unknown> = {
       textQuery: query,
-      pageSize: Math.min(limit, 20),
-    }),
-    signal: AbortSignal.timeout(10000),
-  });
+      pageSize,
+    };
+    if (pageToken) {
+      bodyPayload.pageToken = pageToken;
+    }
 
-  const data = await response.json();
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': apiKey,
+        'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.nationalPhoneNumber,places.internationalPhoneNumber,places.websiteUri,places.googleMapsUri,nextPageToken',
+      },
+      body: JSON.stringify(bodyPayload),
+      signal: AbortSignal.timeout(10000),
+    });
 
-  if (!response.ok) {
-    const errorDetail = data.error?.message || response.statusText;
-    throw new Error(`Places API (New) [${response.status}]: ${errorDetail}`);
+    const data = await response.json();
+
+    if (!response.ok) {
+      const errorDetail = data.error?.message || response.statusText;
+      throw new Error(`Places API (New) [${response.status}]: ${errorDetail}`);
+    }
+
+    if (!data.places || data.places.length === 0) {
+      break;
+    }
+
+    for (const p of data.places) {
+      results.push({
+        place_id: p.id,
+        name: p.displayName?.text || 'Unknown Business',
+        formatted_address: p.formattedAddress,
+        phone: p.nationalPhoneNumber || p.internationalPhoneNumber,
+        website: p.websiteUri,
+        source_url: p.googleMapsUri,
+      });
+      if (results.length >= targetLimit) break;
+    }
+
+    if (!data.nextPageToken || results.length >= targetLimit) {
+      break;
+    }
+    pageToken = data.nextPageToken;
+    // Brief sleep to avoid rate limits between pages
+    await new Promise((resolve) => setTimeout(resolve, 500));
   }
 
-  if (!data.places || data.places.length === 0) {
-    return [];
-  }
-
-  return data.places.map((p: {
-    id: string;
-    displayName?: { text?: string };
-    formattedAddress?: string;
-    nationalPhoneNumber?: string;
-    internationalPhoneNumber?: string;
-    websiteUri?: string;
-    googleMapsUri?: string;
-  }) => ({
-    place_id: p.id,
-    name: p.displayName?.text || 'Unknown Business',
-    formatted_address: p.formattedAddress,
-    phone: p.nationalPhoneNumber || p.internationalPhoneNumber,
-    website: p.websiteUri,
-    source_url: p.googleMapsUri,
-  }));
+  return results;
 }
 
 /**
@@ -114,7 +132,7 @@ async function searchPlacesLegacy(query: string, apiKey: string, limit: number):
     throw new Error(`Google Places API status ${data.status}: ${data.error_message || 'No results'}`);
   }
 
-  const placesToFetch = data.results.slice(0, Math.min(limit, 20));
+  const placesToFetch = data.results.slice(0, Math.min(limit, 100));
 
   const detailsPromises = placesToFetch.map(async (p: { place_id: string; name: string; formatted_address?: string }) => {
     const details = await fetchLegacyPlaceDetails(p.place_id, apiKey);
@@ -132,137 +150,149 @@ async function searchPlacesLegacy(query: string, apiKey: string, limit: number):
 }
 
 /**
- * Discover leads from Google Places with automatic New / Legacy endpoint negotiation
+ * Discover in-memory leads from Google Places WITHOUT saving to database
  */
 export async function discoverGooglePlacesLeads(
   niche: string,
   location: string,
   limit: number = 10
-): Promise<NormalizedPlace[]> {
+): Promise<LeadDiscoveryResult> {
   const apiKey = process.env.GOOGLE_MAPS_API_KEY;
   if (!apiKey) {
     throw new Error('GOOGLE_MAPS_API_KEY is not configured in .env.local');
   }
 
-  const query = `${niche.trim()} in ${location.trim()}`;
+  const cleanNiche = niche.trim();
+  const cleanLocation = location.trim();
+  if (!cleanNiche) throw new Error('Industry / Niche is required');
+  if (!cleanLocation) throw new Error('Location is required');
 
-  // 1. Try Places API (New) first (preferred by modern Google Cloud projects)
+  const query = `${cleanNiche} in ${cleanLocation}`;
+  let rawPlaces: NormalizedPlace[] = [];
+
+  // 1. Try Places API (New) first (preferred)
   try {
-    return await searchPlacesNew(query, apiKey, limit);
+    rawPlaces = await searchPlacesNew(query, apiKey, limit);
   } catch (newApiErr: unknown) {
     const newErrMsg = newApiErr instanceof Error ? newApiErr.message : String(newApiErr);
     
-    // 2. Fallback to Legacy Places API if Places (New) is not configured
+    // 2. Fallback to Legacy Places API if necessary
     try {
-      return await searchPlacesLegacy(query, apiKey, limit);
+      rawPlaces = await searchPlacesLegacy(query, apiKey, limit);
     } catch (legacyErr: unknown) {
       const legacyErrMsg = legacyErr instanceof Error ? legacyErr.message : String(legacyErr);
 
-      // Return the most informative actionable error
       if (newErrMsg.includes('API key not valid') || newErrMsg.includes('API_KEY_INVALID')) {
         throw new Error(
-          'Google Places API Error: The provided GOOGLE_MAPS_API_KEY is invalid or not activated for the Places API. Please enable "Places API (New)" and ensure billing is active in your Google Cloud Console.'
+          'Google Places API Error: The provided GOOGLE_MAPS_API_KEY is invalid or not activated. Please enable "Places API (New)" and ensure billing is active in Google Cloud Console.'
         );
       }
 
       if (legacyErrMsg.includes('REQUEST_DENIED') || legacyErrMsg.includes('LegacyApiNotActivatedMapError')) {
         throw new Error(
-          'Google Cloud Configuration Required: The Google Cloud project for this API key has not enabled the Places API. To enable it, visit Google Cloud Console > APIs & Services > Enable "Places API (New)".'
+          'Google Cloud Configuration Required: The Google Cloud project has not enabled Places API. Enable "Places API (New)" in Google Cloud Console.'
         );
       }
 
       throw new Error(`Google Places API Error: ${newErrMsg || legacyErrMsg}`);
     }
   }
-}
-
-/**
- * Generate, normalize, deduplicate, and save leads into Neon PostgreSQL
- */
-export async function generateAndSaveLeads(
-  niche: string,
-  location: string,
-  requestedCount: number
-): Promise<LeadGenerationResult> {
-  const cleanNiche = niche.trim();
-  const cleanLocation = location.trim();
-
-  if (!cleanNiche) throw new Error('Industry / Niche is required');
-  if (!cleanLocation) throw new Error('Location is required');
-  const count = Math.min(Math.max(Number(requestedCount) || 5, 1), 20);
-
-  // 1. Fetch places from Google Places API
-  const rawPlaces = await discoverGooglePlacesLeads(cleanNiche, cleanLocation, count);
 
   if (rawPlaces.length === 0) {
-    return {
-      totalFound: 0,
-      insertedCount: 0,
-      duplicatesCount: 0,
-      leads: [],
-    };
+    return { totalFound: 0, leads: [] };
   }
 
-  // 2. Normalize raw data
-  const normalizedCandidates = rawPlaces.map((item) => ({
-    company_name: (item.name || 'Unknown Business').trim(),
-    website: item.website ? item.website.trim() : null,
-    phone: item.phone ? item.phone.trim() : null,
-    address: item.formatted_address ? item.formatted_address.trim() : null,
-    industry: cleanNiche,
-    source: 'Google Places',
-    source_url: item.source_url ? item.source_url.trim() : null,
-  }));
+  // Check which of these leads already exist in PostgreSQL database
+  const discoveredLeads: DiscoveredLead[] = [];
 
-  // 3. Deduplicate against PostgreSQL leads table
-  const newlyInsertedLeads: Lead[] = [];
-  let duplicatesCount = 0;
+  for (let i = 0; i < rawPlaces.length; i++) {
+    const p = rawPlaces[i];
+    const companyName = (p.name || 'Unknown Business').trim();
+    const address = p.formatted_address ? p.formatted_address.trim() : null;
 
-  for (const candidate of normalizedCandidates) {
+    let isSaved = false;
     try {
       const existing = await sql`
         SELECT id FROM leads 
-        WHERE LOWER(TRIM(company_name)) = LOWER(TRIM(${candidate.company_name}))
-          AND LOWER(TRIM(COALESCE(address, ''))) = LOWER(TRIM(COALESCE(${candidate.address}, '')))
+        WHERE LOWER(TRIM(company_name)) = LOWER(TRIM(${companyName}))
+          AND LOWER(TRIM(COALESCE(address, ''))) = LOWER(TRIM(COALESCE(${address}, '')))
         LIMIT 1;
       `;
+      isSaved = existing.length > 0;
+    } catch {
+      isSaved = false;
+    }
 
-      if (existing.length > 0) {
-        duplicatesCount++;
-        continue;
-      }
+    discoveredLeads.push({
+      temp_id: `disc_${Date.now()}_${i}_${Math.random().toString(36).slice(2, 7)}`,
+      company_name: companyName,
+      website: p.website ? p.website.trim() : null,
+      phone: p.phone ? p.phone.trim() : null,
+      email: p.email ? p.email.trim() : null,
+      address,
+      industry: cleanNiche,
+      source: 'Google Places',
+      source_url: p.source_url ? p.source_url.trim() : null,
+      status: 'New',
+      isSaved,
+    });
+  }
 
-      const inserted = await sql`
-        INSERT INTO leads (company_name, website, phone, address, industry, source, source_url)
-        VALUES (
-          ${candidate.company_name},
-          ${candidate.website},
-          ${candidate.phone},
-          ${candidate.address},
-          ${candidate.industry},
-          ${candidate.source},
-          ${candidate.source_url}
-        )
-        RETURNING id, company_name, website, phone, address, industry, source, source_url, created_on;
-      `;
+  return {
+    totalFound: discoveredLeads.length,
+    leads: discoveredLeads,
+  };
+}
 
-      if (inserted.length > 0) {
-        newlyInsertedLeads.push(inserted[0] as unknown as Lead);
-      }
-    } catch (dbErr: unknown) {
-      const err = dbErr as { code?: string };
-      if (err.code === '23505') {
-        duplicatesCount++;
-      } else {
-        throw dbErr;
-      }
+/**
+ * Save a single discovered lead to PostgreSQL database
+ */
+export async function saveLeadToDatabase(lead: DiscoveredLead): Promise<Lead> {
+  const companyName = lead.company_name.trim();
+  const address = lead.address ? lead.address.trim() : null;
+
+  const inserted = await sql`
+    INSERT INTO leads (company_name, website, phone, email, address, industry, status, source, source_url)
+    VALUES (
+      ${companyName},
+      ${lead.website || null},
+      ${lead.phone || null},
+      ${lead.email || null},
+      ${address},
+      ${lead.industry},
+      ${lead.status || 'New'},
+      ${lead.source || 'Google Places'},
+      ${lead.source_url || null}
+    )
+    ON CONFLICT (LOWER(TRIM(company_name)), LOWER(TRIM(COALESCE(address, ''))))
+    DO UPDATE SET
+      website = EXCLUDED.website,
+      phone = EXCLUDED.phone,
+      email = COALESCE(EXCLUDED.email, leads.email),
+      status = leads.status
+    RETURNING id, company_name, website, phone, email, address, industry, status, source, source_url, created_on;
+  `;
+
+  return inserted[0] as unknown as Lead;
+}
+
+/**
+ * Save multiple discovered leads in bulk to PostgreSQL
+ */
+export async function saveBulkLeadsToDatabase(leadsList: DiscoveredLead[]): Promise<{ savedCount: number; savedLeads: Lead[] }> {
+  const savedLeads: Lead[] = [];
+
+  for (const lead of leadsList) {
+    try {
+      const saved = await saveLeadToDatabase(lead);
+      savedLeads.push(saved);
+    } catch (err) {
+      console.error('Failed to save lead:', lead.company_name, err);
     }
   }
 
   return {
-    totalFound: rawPlaces.length,
-    insertedCount: newlyInsertedLeads.length,
-    duplicatesCount,
-    leads: newlyInsertedLeads,
+    savedCount: savedLeads.length,
+    savedLeads,
   };
 }
