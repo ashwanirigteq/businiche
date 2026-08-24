@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
 import { getServerSession } from '@/lib/auth';
 import { sendLeadOfferEmail } from '@/lib/email';
+import { deductUserCredits, CREDIT_COSTS } from '@/lib/credits';
 import type { Lead } from '@/lib/types';
 
 export async function POST(request: Request) {
@@ -16,22 +17,42 @@ export async function POST(request: Request) {
 
     let targetLeads: Lead[] = [];
 
+    const isAdmin = session.role === 'Admin';
+    const userId = session.userId;
+
     if (Array.isArray(leadIds) && leadIds.length > 0) {
-      // Query specific leads that have emails
-      const result = await sql`
-        SELECT id, company_name, website, phone, email, address, industry, status, source, source_url, created_on
-        FROM leads
-        WHERE id = ANY(${leadIds}) AND email IS NOT NULL AND email != '';
-      `;
+      let result;
+      if (isAdmin) {
+        result = await sql`
+          SELECT id, company_name, website, phone, email, address, industry, status, source, source_url, created_on
+          FROM leads
+          WHERE id = ANY(${leadIds}) AND email IS NOT NULL AND email != '';
+        `;
+      } else {
+        result = await sql`
+          SELECT id, company_name, website, phone, email, address, industry, status, source, source_url, created_on
+          FROM leads
+          WHERE id = ANY(${leadIds}) AND created_by = ${userId} AND email IS NOT NULL AND email != '';
+        `;
+      }
       targetLeads = result as unknown as Lead[];
     } else {
-      // Query all leads with emails
-      const result = await sql`
-        SELECT id, company_name, website, phone, email, address, industry, status, source, source_url, created_on
-        FROM leads
-        WHERE email IS NOT NULL AND email != ''
-        ORDER BY created_on DESC;
-      `;
+      let result;
+      if (isAdmin) {
+        result = await sql`
+          SELECT id, company_name, website, phone, email, address, industry, status, source, source_url, created_on
+          FROM leads
+          WHERE email IS NOT NULL AND email != ''
+          ORDER BY created_on DESC;
+        `;
+      } else {
+        result = await sql`
+          SELECT id, company_name, website, phone, email, address, industry, status, source, source_url, created_on
+          FROM leads
+          WHERE created_by = ${userId} AND email IS NOT NULL AND email != ''
+          ORDER BY created_on DESC;
+        `;
+      }
       targetLeads = result as unknown as Lead[];
     }
 
@@ -39,6 +60,27 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { error: 'No leads with valid email addresses found to send.' },
         { status: 400 }
+      );
+    }
+
+    // Calculate total required credits (5 credits per lead)
+    const requiredCredits = targetLeads.length * CREDIT_COSTS.EMAIL_PER_LEAD;
+
+    const creditResult = await deductUserCredits(
+      session.userId,
+      session.role,
+      requiredCredits,
+      `Bulk Email ${targetLeads.length} Lead(s)`
+    );
+
+    if (!creditResult.success) {
+      return NextResponse.json(
+        {
+          error: creditResult.message,
+          outOfCredits: true,
+          remainingCredits: creditResult.remaining,
+        },
+        { status: 402 }
       );
     }
 
@@ -90,10 +132,12 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       success: true,
-      message: `Bulk email campaign finished. Delivered: ${sentCount}, Failed/Skipped: ${failedCount}.`,
+      message: `Bulk email finished. Sent: ${sentCount}, Failed: ${failedCount}.`,
       sentCount,
       failedCount,
       totalAttempted: targetLeads.length,
+      remainingCredits: creditResult.remaining,
+      nextCreditDate: creditResult.nextCreditDate,
       errors: errors.slice(0, 5),
     });
   } catch (err: unknown) {

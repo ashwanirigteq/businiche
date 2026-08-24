@@ -15,17 +15,17 @@ export async function POST(request: Request) {
 
     // Single lead save
     if (lead) {
-      const saved = await saveLeadToDatabase(lead as DiscoveredLead);
+      const saved = await saveLeadToDatabase(lead as DiscoveredLead, session.userId);
       return NextResponse.json({
         success: true,
-        message: `Lead "${saved.company_name}" saved to database successfully.`,
+        message: `Lead "${saved.company_name}" saved successfully.`,
         lead: saved,
       });
     }
 
     // Bulk leads save
     if (Array.isArray(leads) && leads.length > 0) {
-      const { savedCount, savedLeads } = await saveBulkLeadsToDatabase(leads as DiscoveredLead[]);
+      const { savedCount, savedLeads } = await saveBulkLeadsToDatabase(leads as DiscoveredLead[], session.userId);
       return NextResponse.json({
         success: true,
         message: `Successfully saved ${savedCount} leads to the database.`,

@@ -245,14 +245,14 @@ export async function discoverGooglePlacesLeads(
 }
 
 /**
- * Save a single discovered lead to PostgreSQL database
+ * Save a single discovered lead to PostgreSQL database with creator ownership
  */
-export async function saveLeadToDatabase(lead: DiscoveredLead): Promise<Lead> {
+export async function saveLeadToDatabase(lead: DiscoveredLead, userId?: string): Promise<Lead> {
   const companyName = lead.company_name.trim();
   const address = lead.address ? lead.address.trim() : null;
 
   const inserted = await sql`
-    INSERT INTO leads (company_name, website, phone, email, address, industry, status, source, source_url)
+    INSERT INTO leads (company_name, website, phone, email, address, industry, status, source, source_url, created_by)
     VALUES (
       ${companyName},
       ${lead.website || null},
@@ -262,15 +262,17 @@ export async function saveLeadToDatabase(lead: DiscoveredLead): Promise<Lead> {
       ${lead.industry},
       ${lead.status || 'New'},
       ${lead.source || 'Google Places'},
-      ${lead.source_url || null}
+      ${lead.source_url || null},
+      ${userId || null}
     )
     ON CONFLICT (LOWER(TRIM(company_name)), LOWER(TRIM(COALESCE(address, ''))))
     DO UPDATE SET
       website = EXCLUDED.website,
       phone = EXCLUDED.phone,
       email = COALESCE(EXCLUDED.email, leads.email),
-      status = leads.status
-    RETURNING id, company_name, website, phone, email, address, industry, status, source, source_url, created_on;
+      status = leads.status,
+      created_by = COALESCE(leads.created_by, EXCLUDED.created_by)
+    RETURNING id, company_name, website, phone, email, address, industry, status, source, source_url, created_on, created_by;
   `;
 
   return inserted[0] as unknown as Lead;
@@ -279,12 +281,12 @@ export async function saveLeadToDatabase(lead: DiscoveredLead): Promise<Lead> {
 /**
  * Save multiple discovered leads in bulk to PostgreSQL
  */
-export async function saveBulkLeadsToDatabase(leadsList: DiscoveredLead[]): Promise<{ savedCount: number; savedLeads: Lead[] }> {
+export async function saveBulkLeadsToDatabase(leadsList: DiscoveredLead[], userId?: string): Promise<{ savedCount: number; savedLeads: Lead[] }> {
   const savedLeads: Lead[] = [];
 
   for (const lead of leadsList) {
     try {
-      const saved = await saveLeadToDatabase(lead);
+      const saved = await saveLeadToDatabase(lead, userId);
       savedLeads.push(saved);
     } catch (err) {
       console.error('Failed to save lead:', lead.company_name, err);

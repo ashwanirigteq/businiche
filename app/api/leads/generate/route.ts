@@ -1,19 +1,13 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from '@/lib/auth';
 import { discoverGooglePlacesLeads } from '@/lib/places';
+import { deductUserCredits, CREDIT_COSTS } from '@/lib/credits';
 
 export async function POST(request: Request) {
   try {
     const session = await getServerSession();
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized. Please log in.' }, { status: 401 });
-    }
-
-    if (session.role !== 'Admin') {
-      return NextResponse.json(
-        { error: 'Forbidden: Lead generation is restricted to administrators.' },
-        { status: 403 }
-      );
     }
 
     const body = await request.json();
@@ -34,13 +28,35 @@ export async function POST(request: Request) {
     }
 
     const leadLimit = Math.min(Math.max(Number(limit) || 10, 1), 100);
+    const totalRequiredCredits = leadLimit * CREDIT_COSTS.GENERATE_PER_LEAD; // 10 credits per lead
 
-    // Discover in-memory leads WITHOUT auto-saving
+    // Check & Deduct Credits before calling API
+    const creditResult = await deductUserCredits(
+      session.userId,
+      session.role,
+      totalRequiredCredits,
+      `Generate ${leadLimit} Leads`
+    );
+
+    if (!creditResult.success) {
+      return NextResponse.json(
+        {
+          error: creditResult.message,
+          outOfCredits: true,
+          remainingCredits: creditResult.remaining,
+        },
+        { status: 402 }
+      );
+    }
+
+    // Discover in-memory leads
     const result = await discoverGooglePlacesLeads(niche, location, leadLimit);
 
     return NextResponse.json({
       success: true,
-      message: `Discovered ${result.totalFound} businesses matching "${niche}" in "${location}". Leads are ready to review and save.`,
+      message: `Discovered ${result.totalFound} businesses matching "${niche}" in "${location}".`,
+      remainingCredits: creditResult.remaining,
+      nextCreditDate: creditResult.nextCreditDate,
       ...result,
     });
   } catch (err: unknown) {

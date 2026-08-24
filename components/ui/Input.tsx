@@ -21,7 +21,7 @@ export function Input({
   return (
     <div className="w-full">
       {label && (
-        <label htmlFor={inputId} className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1.5">
+        <label htmlFor={inputId} className="block text-xs font-semibold uppercase tracking-wider text-blue-600 mb-1.5">
           {label}
         </label>
       )}
@@ -34,10 +34,10 @@ export function Input({
         <input
           id={inputId}
           className={`block w-full rounded-lg border text-sm text-slate-900 placeholder:text-slate-400 transition-colors
-            focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent
+            focus:outline-none focus:ring-2 focus:border-transparent
             disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed
             ${leftIcon ? 'pl-9 pr-3' : 'px-3'} py-2.5
-            ${error ? 'border-rose-300 bg-rose-50/20 text-rose-900 focus:ring-rose-500' : 'border-slate-200 bg-white hover:border-slate-300'}
+            ${error ? 'border-rose-300 bg-rose-50/20 text-rose-900 focus:ring-rose-500' : 'border-blue-100 bg-white hover:border-blue-200 focus:ring-blue-500'}
             ${className}`}
           {...props}
         />

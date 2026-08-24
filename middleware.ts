@@ -10,7 +10,7 @@ const SESSION_COOKIE_NAME = 'businiche_session';
 const PUBLIC_PATHS = ['/login', '/signup', '/api/auth/login', '/api/auth/signup'];
 
 // Admin-only paths
-const ADMIN_PATHS = ['/users', '/generate-leads', '/api/users', '/api/leads/generate'];
+const ADMIN_PATHS = ['/users', '/api/users'];
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;

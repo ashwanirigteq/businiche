@@ -18,199 +18,194 @@ export async function GET(request: Request) {
     const limit = Math.max(Math.min(parseInt(searchParams.get('limit') || '25', 10), 200), 1);
     const offset = (page - 1) * limit;
 
-    // Use parameterized queries
+    const isAdmin = session.role === 'Admin';
+    const userId = session.userId;
+
     const searchPattern = q ? `%${q}%` : null;
 
     let leadsQuery;
     let countQuery;
 
-    if (searchPattern && industry && status && source) {
-      leadsQuery = sql`
-        SELECT id, company_name, website, phone, email, address, industry, status, source, source_url, created_on
-        FROM leads
-        WHERE (
-          company_name ILIKE ${searchPattern} OR
-          industry ILIKE ${searchPattern} OR
-          COALESCE(address, '') ILIKE ${searchPattern} OR
-          COALESCE(phone, '') ILIKE ${searchPattern} OR
-          COALESCE(email, '') ILIKE ${searchPattern} OR
-          COALESCE(website, '') ILIKE ${searchPattern}
-        )
-        AND industry = ${industry} AND status = ${status} AND source = ${source}
-        ORDER BY created_on DESC LIMIT ${limit} OFFSET ${offset};
-      `;
-      countQuery = sql`
-        SELECT COUNT(*)::int as total FROM leads
-        WHERE (
-          company_name ILIKE ${searchPattern} OR
-          industry ILIKE ${searchPattern} OR
-          COALESCE(address, '') ILIKE ${searchPattern} OR
-          COALESCE(phone, '') ILIKE ${searchPattern} OR
-          COALESCE(email, '') ILIKE ${searchPattern} OR
-          COALESCE(website, '') ILIKE ${searchPattern}
-        )
-        AND industry = ${industry} AND status = ${status} AND source = ${source};
-      `;
-    } else if (searchPattern && industry && status) {
-      leadsQuery = sql`
-        SELECT id, company_name, website, phone, email, address, industry, status, source, source_url, created_on
-        FROM leads
-        WHERE (
-          company_name ILIKE ${searchPattern} OR
-          industry ILIKE ${searchPattern} OR
-          COALESCE(address, '') ILIKE ${searchPattern} OR
-          COALESCE(phone, '') ILIKE ${searchPattern} OR
-          COALESCE(email, '') ILIKE ${searchPattern} OR
-          COALESCE(website, '') ILIKE ${searchPattern}
-        )
-        AND industry = ${industry} AND status = ${status}
-        ORDER BY created_on DESC LIMIT ${limit} OFFSET ${offset};
-      `;
-      countQuery = sql`
-        SELECT COUNT(*)::int as total FROM leads
-        WHERE (
-          company_name ILIKE ${searchPattern} OR
-          industry ILIKE ${searchPattern} OR
-          COALESCE(address, '') ILIKE ${searchPattern} OR
-          COALESCE(phone, '') ILIKE ${searchPattern} OR
-          COALESCE(email, '') ILIKE ${searchPattern} OR
-          COALESCE(website, '') ILIKE ${searchPattern}
-        )
-        AND industry = ${industry} AND status = ${status};
-      `;
-    } else if (searchPattern && industry) {
-      leadsQuery = sql`
-        SELECT id, company_name, website, phone, email, address, industry, status, source, source_url, created_on
-        FROM leads
-        WHERE (
-          company_name ILIKE ${searchPattern} OR
-          industry ILIKE ${searchPattern} OR
-          COALESCE(address, '') ILIKE ${searchPattern} OR
-          COALESCE(phone, '') ILIKE ${searchPattern} OR
-          COALESCE(email, '') ILIKE ${searchPattern} OR
-          COALESCE(website, '') ILIKE ${searchPattern}
-        )
-        AND industry = ${industry}
-        ORDER BY created_on DESC LIMIT ${limit} OFFSET ${offset};
-      `;
-      countQuery = sql`
-        SELECT COUNT(*)::int as total FROM leads
-        WHERE (
-          company_name ILIKE ${searchPattern} OR
-          industry ILIKE ${searchPattern} OR
-          COALESCE(address, '') ILIKE ${searchPattern} OR
-          COALESCE(phone, '') ILIKE ${searchPattern} OR
-          COALESCE(email, '') ILIKE ${searchPattern} OR
-          COALESCE(website, '') ILIKE ${searchPattern}
-        )
-        AND industry = ${industry};
-      `;
-    } else if (searchPattern && status) {
-      leadsQuery = sql`
-        SELECT id, company_name, website, phone, email, address, industry, status, source, source_url, created_on
-        FROM leads
-        WHERE (
-          company_name ILIKE ${searchPattern} OR
-          industry ILIKE ${searchPattern} OR
-          COALESCE(address, '') ILIKE ${searchPattern} OR
-          COALESCE(phone, '') ILIKE ${searchPattern} OR
-          COALESCE(email, '') ILIKE ${searchPattern} OR
-          COALESCE(website, '') ILIKE ${searchPattern}
-        )
-        AND status = ${status}
-        ORDER BY created_on DESC LIMIT ${limit} OFFSET ${offset};
-      `;
-      countQuery = sql`
-        SELECT COUNT(*)::int as total FROM leads
-        WHERE (
-          company_name ILIKE ${searchPattern} OR
-          industry ILIKE ${searchPattern} OR
-          COALESCE(address, '') ILIKE ${searchPattern} OR
-          COALESCE(phone, '') ILIKE ${searchPattern} OR
-          COALESCE(email, '') ILIKE ${searchPattern} OR
-          COALESCE(website, '') ILIKE ${searchPattern}
-        )
-        AND status = ${status};
-      `;
-    } else if (searchPattern) {
-      leadsQuery = sql`
-        SELECT id, company_name, website, phone, email, address, industry, status, source, source_url, created_on
-        FROM leads
-        WHERE (
-          company_name ILIKE ${searchPattern} OR
-          industry ILIKE ${searchPattern} OR
-          COALESCE(address, '') ILIKE ${searchPattern} OR
-          COALESCE(phone, '') ILIKE ${searchPattern} OR
-          COALESCE(email, '') ILIKE ${searchPattern} OR
-          COALESCE(website, '') ILIKE ${searchPattern}
-        )
-        ORDER BY created_on DESC LIMIT ${limit} OFFSET ${offset};
-      `;
-      countQuery = sql`
-        SELECT COUNT(*)::int as total FROM leads
-        WHERE (
-          company_name ILIKE ${searchPattern} OR
-          industry ILIKE ${searchPattern} OR
-          COALESCE(address, '') ILIKE ${searchPattern} OR
-          COALESCE(phone, '') ILIKE ${searchPattern} OR
-          COALESCE(email, '') ILIKE ${searchPattern} OR
-          COALESCE(website, '') ILIKE ${searchPattern}
-        );
-      `;
-    } else if (industry && status) {
-      leadsQuery = sql`
-        SELECT id, company_name, website, phone, email, address, industry, status, source, source_url, created_on
-        FROM leads
-        WHERE industry = ${industry} AND status = ${status}
-        ORDER BY created_on DESC LIMIT ${limit} OFFSET ${offset};
-      `;
-      countQuery = sql`
-        SELECT COUNT(*)::int as total FROM leads WHERE industry = ${industry} AND status = ${status};
-      `;
-    } else if (industry) {
-      leadsQuery = sql`
-        SELECT id, company_name, website, phone, email, address, industry, status, source, source_url, created_on
-        FROM leads
-        WHERE industry = ${industry}
-        ORDER BY created_on DESC LIMIT ${limit} OFFSET ${offset};
-      `;
-      countQuery = sql`
-        SELECT COUNT(*)::int as total FROM leads WHERE industry = ${industry};
-      `;
-    } else if (status) {
-      leadsQuery = sql`
-        SELECT id, company_name, website, phone, email, address, industry, status, source, source_url, created_on
-        FROM leads
-        WHERE status = ${status}
-        ORDER BY created_on DESC LIMIT ${limit} OFFSET ${offset};
-      `;
-      countQuery = sql`
-        SELECT COUNT(*)::int as total FROM leads WHERE status = ${status};
-      `;
-    } else if (source) {
-      leadsQuery = sql`
-        SELECT id, company_name, website, phone, email, address, industry, status, source, source_url, created_on
-        FROM leads
-        WHERE source = ${source}
-        ORDER BY created_on DESC LIMIT ${limit} OFFSET ${offset};
-      `;
-      countQuery = sql`
-        SELECT COUNT(*)::int as total FROM leads WHERE source = ${source};
-      `;
+    // Filter clauses for tenant isolation
+    if (isAdmin) {
+      if (searchPattern && industry && status) {
+        leadsQuery = sql`
+          SELECT id, company_name, website, phone, email, address, industry, status, source, source_url, created_on, additional_emails, additional_phones
+          FROM leads
+          WHERE (company_name ILIKE ${searchPattern} OR industry ILIKE ${searchPattern} OR COALESCE(address,'') ILIKE ${searchPattern} OR COALESCE(phone,'') ILIKE ${searchPattern} OR COALESCE(email,'') ILIKE ${searchPattern} OR COALESCE(website,'') ILIKE ${searchPattern})
+          AND industry = ${industry} AND status = ${status}
+          ORDER BY created_on DESC LIMIT ${limit} OFFSET ${offset};
+        `;
+        countQuery = sql`
+          SELECT COUNT(*)::int as total FROM leads
+          WHERE (company_name ILIKE ${searchPattern} OR industry ILIKE ${searchPattern} OR COALESCE(address,'') ILIKE ${searchPattern} OR COALESCE(phone,'') ILIKE ${searchPattern} OR COALESCE(email,'') ILIKE ${searchPattern} OR COALESCE(website,'') ILIKE ${searchPattern})
+          AND industry = ${industry} AND status = ${status};
+        `;
+      } else if (searchPattern && industry) {
+        leadsQuery = sql`
+          SELECT id, company_name, website, phone, email, address, industry, status, source, source_url, created_on, additional_emails, additional_phones
+          FROM leads
+          WHERE (company_name ILIKE ${searchPattern} OR industry ILIKE ${searchPattern} OR COALESCE(address,'') ILIKE ${searchPattern} OR COALESCE(phone,'') ILIKE ${searchPattern} OR COALESCE(email,'') ILIKE ${searchPattern} OR COALESCE(website,'') ILIKE ${searchPattern})
+          AND industry = ${industry}
+          ORDER BY created_on DESC LIMIT ${limit} OFFSET ${offset};
+        `;
+        countQuery = sql`
+          SELECT COUNT(*)::int as total FROM leads
+          WHERE (company_name ILIKE ${searchPattern} OR industry ILIKE ${searchPattern} OR COALESCE(address,'') ILIKE ${searchPattern} OR COALESCE(phone,'') ILIKE ${searchPattern} OR COALESCE(email,'') ILIKE ${searchPattern} OR COALESCE(website,'') ILIKE ${searchPattern})
+          AND industry = ${industry};
+        `;
+      } else if (searchPattern && status) {
+        leadsQuery = sql`
+          SELECT id, company_name, website, phone, email, address, industry, status, source, source_url, created_on, additional_emails, additional_phones
+          FROM leads
+          WHERE (company_name ILIKE ${searchPattern} OR industry ILIKE ${searchPattern} OR COALESCE(address,'') ILIKE ${searchPattern} OR COALESCE(phone,'') ILIKE ${searchPattern} OR COALESCE(email,'') ILIKE ${searchPattern} OR COALESCE(website,'') ILIKE ${searchPattern})
+          AND status = ${status}
+          ORDER BY created_on DESC LIMIT ${limit} OFFSET ${offset};
+        `;
+        countQuery = sql`
+          SELECT COUNT(*)::int as total FROM leads
+          WHERE (company_name ILIKE ${searchPattern} OR industry ILIKE ${searchPattern} OR COALESCE(address,'') ILIKE ${searchPattern} OR COALESCE(phone,'') ILIKE ${searchPattern} OR COALESCE(email,'') ILIKE ${searchPattern} OR COALESCE(website,'') ILIKE ${searchPattern})
+          AND status = ${status};
+        `;
+      } else if (searchPattern) {
+        leadsQuery = sql`
+          SELECT id, company_name, website, phone, email, address, industry, status, source, source_url, created_on, additional_emails, additional_phones
+          FROM leads
+          WHERE (company_name ILIKE ${searchPattern} OR industry ILIKE ${searchPattern} OR COALESCE(address,'') ILIKE ${searchPattern} OR COALESCE(phone,'') ILIKE ${searchPattern} OR COALESCE(email,'') ILIKE ${searchPattern} OR COALESCE(website,'') ILIKE ${searchPattern})
+          ORDER BY created_on DESC LIMIT ${limit} OFFSET ${offset};
+        `;
+        countQuery = sql`
+          SELECT COUNT(*)::int as total FROM leads
+          WHERE (company_name ILIKE ${searchPattern} OR industry ILIKE ${searchPattern} OR COALESCE(address,'') ILIKE ${searchPattern} OR COALESCE(phone,'') ILIKE ${searchPattern} OR COALESCE(email,'') ILIKE ${searchPattern} OR COALESCE(website,'') ILIKE ${searchPattern});
+        `;
+      } else if (industry && status) {
+        leadsQuery = sql`
+          SELECT id, company_name, website, phone, email, address, industry, status, source, source_url, created_on, additional_emails, additional_phones
+          FROM leads WHERE industry = ${industry} AND status = ${status}
+          ORDER BY created_on DESC LIMIT ${limit} OFFSET ${offset};
+        `;
+        countQuery = sql`SELECT COUNT(*)::int as total FROM leads WHERE industry = ${industry} AND status = ${status};`;
+      } else if (industry) {
+        leadsQuery = sql`
+          SELECT id, company_name, website, phone, email, address, industry, status, source, source_url, created_on, additional_emails, additional_phones
+          FROM leads WHERE industry = ${industry}
+          ORDER BY created_on DESC LIMIT ${limit} OFFSET ${offset};
+        `;
+        countQuery = sql`SELECT COUNT(*)::int as total FROM leads WHERE industry = ${industry};`;
+      } else if (status) {
+        leadsQuery = sql`
+          SELECT id, company_name, website, phone, email, address, industry, status, source, source_url, created_on, additional_emails, additional_phones
+          FROM leads WHERE status = ${status}
+          ORDER BY created_on DESC LIMIT ${limit} OFFSET ${offset};
+        `;
+        countQuery = sql`SELECT COUNT(*)::int as total FROM leads WHERE status = ${status};`;
+      } else if (source) {
+        leadsQuery = sql`
+          SELECT id, company_name, website, phone, email, address, industry, status, source, source_url, created_on, additional_emails, additional_phones
+          FROM leads WHERE source = ${source}
+          ORDER BY created_on DESC LIMIT ${limit} OFFSET ${offset};
+        `;
+        countQuery = sql`SELECT COUNT(*)::int as total FROM leads WHERE source = ${source};`;
+      } else {
+        leadsQuery = sql`
+          SELECT id, company_name, website, phone, email, address, industry, status, source, source_url, created_on, additional_emails, additional_phones
+          FROM leads ORDER BY created_on DESC LIMIT ${limit} OFFSET ${offset};
+        `;
+        countQuery = sql`SELECT COUNT(*)::int as total FROM leads;`;
+      }
     } else {
-      leadsQuery = sql`
-        SELECT id, company_name, website, phone, email, address, industry, status, source, source_url, created_on
-        FROM leads
-        ORDER BY created_on DESC LIMIT ${limit} OFFSET ${offset};
-      `;
-      countQuery = sql`SELECT COUNT(*)::int as total FROM leads;`;
+      // Non-Admin: Strict user-level data isolation (created_by = userId)
+      if (searchPattern && industry && status) {
+        leadsQuery = sql`
+          SELECT id, company_name, website, phone, email, address, industry, status, source, source_url, created_on, additional_emails, additional_phones
+          FROM leads
+          WHERE created_by = ${userId}
+          AND (company_name ILIKE ${searchPattern} OR industry ILIKE ${searchPattern} OR COALESCE(address,'') ILIKE ${searchPattern} OR COALESCE(phone,'') ILIKE ${searchPattern} OR COALESCE(email,'') ILIKE ${searchPattern} OR COALESCE(website,'') ILIKE ${searchPattern})
+          AND industry = ${industry} AND status = ${status}
+          ORDER BY created_on DESC LIMIT ${limit} OFFSET ${offset};
+        `;
+        countQuery = sql`
+          SELECT COUNT(*)::int as total FROM leads
+          WHERE created_by = ${userId}
+          AND (company_name ILIKE ${searchPattern} OR industry ILIKE ${searchPattern} OR COALESCE(address,'') ILIKE ${searchPattern} OR COALESCE(phone,'') ILIKE ${searchPattern} OR COALESCE(email,'') ILIKE ${searchPattern} OR COALESCE(website,'') ILIKE ${searchPattern})
+          AND industry = ${industry} AND status = ${status};
+        `;
+      } else if (searchPattern && industry) {
+        leadsQuery = sql`
+          SELECT id, company_name, website, phone, email, address, industry, status, source, source_url, created_on, additional_emails, additional_phones
+          FROM leads
+          WHERE created_by = ${userId}
+          AND (company_name ILIKE ${searchPattern} OR industry ILIKE ${searchPattern} OR COALESCE(address,'') ILIKE ${searchPattern} OR COALESCE(phone,'') ILIKE ${searchPattern} OR COALESCE(email,'') ILIKE ${searchPattern} OR COALESCE(website,'') ILIKE ${searchPattern})
+          AND industry = ${industry}
+          ORDER BY created_on DESC LIMIT ${limit} OFFSET ${offset};
+        `;
+        countQuery = sql`
+          SELECT COUNT(*)::int as total FROM leads
+          WHERE created_by = ${userId}
+          AND (company_name ILIKE ${searchPattern} OR industry ILIKE ${searchPattern} OR COALESCE(address,'') ILIKE ${searchPattern} OR COALESCE(phone,'') ILIKE ${searchPattern} OR COALESCE(email,'') ILIKE ${searchPattern} OR COALESCE(website,'') ILIKE ${searchPattern})
+          AND industry = ${industry};
+        `;
+      } else if (searchPattern && status) {
+        leadsQuery = sql`
+          SELECT id, company_name, website, phone, email, address, industry, status, source, source_url, created_on, additional_emails, additional_phones
+          FROM leads
+          WHERE created_by = ${userId}
+          AND (company_name ILIKE ${searchPattern} OR industry ILIKE ${searchPattern} OR COALESCE(address,'') ILIKE ${searchPattern} OR COALESCE(phone,'') ILIKE ${searchPattern} OR COALESCE(email,'') ILIKE ${searchPattern} OR COALESCE(website,'') ILIKE ${searchPattern})
+          AND status = ${status}
+          ORDER BY created_on DESC LIMIT ${limit} OFFSET ${offset};
+        `;
+        countQuery = sql`
+          SELECT COUNT(*)::int as total FROM leads
+          WHERE created_by = ${userId}
+          AND (company_name ILIKE ${searchPattern} OR industry ILIKE ${searchPattern} OR COALESCE(address,'') ILIKE ${searchPattern} OR COALESCE(phone,'') ILIKE ${searchPattern} OR COALESCE(email,'') ILIKE ${searchPattern} OR COALESCE(website,'') ILIKE ${searchPattern})
+          AND status = ${status};
+        `;
+      } else if (searchPattern) {
+        leadsQuery = sql`
+          SELECT id, company_name, website, phone, email, address, industry, status, source, source_url, created_on, additional_emails, additional_phones
+          FROM leads
+          WHERE created_by = ${userId}
+          AND (company_name ILIKE ${searchPattern} OR industry ILIKE ${searchPattern} OR COALESCE(address,'') ILIKE ${searchPattern} OR COALESCE(phone,'') ILIKE ${searchPattern} OR COALESCE(email,'') ILIKE ${searchPattern} OR COALESCE(website,'') ILIKE ${searchPattern})
+          ORDER BY created_on DESC LIMIT ${limit} OFFSET ${offset};
+        `;
+        countQuery = sql`
+          SELECT COUNT(*)::int as total FROM leads
+          WHERE created_by = ${userId}
+          AND (company_name ILIKE ${searchPattern} OR industry ILIKE ${searchPattern} OR COALESCE(address,'') ILIKE ${searchPattern} OR COALESCE(phone,'') ILIKE ${searchPattern} OR COALESCE(email,'') ILIKE ${searchPattern} OR COALESCE(website,'') ILIKE ${searchPattern});
+        `;
+      } else if (industry) {
+        leadsQuery = sql`
+          SELECT id, company_name, website, phone, email, address, industry, status, source, source_url, created_on, additional_emails, additional_phones
+          FROM leads WHERE created_by = ${userId} AND industry = ${industry}
+          ORDER BY created_on DESC LIMIT ${limit} OFFSET ${offset};
+        `;
+        countQuery = sql`SELECT COUNT(*)::int as total FROM leads WHERE created_by = ${userId} AND industry = ${industry};`;
+      } else if (status) {
+        leadsQuery = sql`
+          SELECT id, company_name, website, phone, email, address, industry, status, source, source_url, created_on, additional_emails, additional_phones
+          FROM leads WHERE created_by = ${userId} AND status = ${status}
+          ORDER BY created_on DESC LIMIT ${limit} OFFSET ${offset};
+        `;
+        countQuery = sql`SELECT COUNT(*)::int as total FROM leads WHERE created_by = ${userId} AND status = ${status};`;
+      } else {
+        leadsQuery = sql`
+          SELECT id, company_name, website, phone, email, address, industry, status, source, source_url, created_on, additional_emails, additional_phones
+          FROM leads WHERE created_by = ${userId}
+          ORDER BY created_on DESC LIMIT ${limit} OFFSET ${offset};
+        `;
+        countQuery = sql`SELECT COUNT(*)::int as total FROM leads WHERE created_by = ${userId};`;
+      }
     }
 
     const [leads, countResult, industriesResult, statusesResult] = await Promise.all([
       leadsQuery,
       countQuery,
-      sql`SELECT DISTINCT industry FROM leads WHERE industry IS NOT NULL ORDER BY industry ASC;`,
-      sql`SELECT DISTINCT status FROM leads WHERE status IS NOT NULL ORDER BY status ASC;`,
+      isAdmin
+        ? sql`SELECT DISTINCT industry FROM leads WHERE industry IS NOT NULL ORDER BY industry ASC;`
+        : sql`SELECT DISTINCT industry FROM leads WHERE created_by = ${userId} AND industry IS NOT NULL ORDER BY industry ASC;`,
+      isAdmin
+        ? sql`SELECT DISTINCT status FROM leads WHERE status IS NOT NULL ORDER BY status ASC;`
+        : sql`SELECT DISTINCT status FROM leads WHERE created_by = ${userId} AND status IS NOT NULL ORDER BY status ASC;`,
     ]);
 
     const total = countResult[0]?.total ?? leads.length;
@@ -230,7 +225,7 @@ export async function GET(request: Request) {
   } catch (err: unknown) {
     console.error('Fetch leads error:', err);
     return NextResponse.json(
-      { error: 'Failed to retrieve leads from database.' },
+      { error: 'Failed to retrieve leads.' },
       { status: 500 }
     );
   }

@@ -29,10 +29,10 @@ export function Button({
   };
 
   const variantStyles = {
-    primary: 'bg-slate-900 text-white hover:bg-slate-800 focus:ring-slate-900 shadow-sm hover:shadow active:scale-[0.99]',
-    secondary: 'bg-slate-100 text-slate-900 hover:bg-slate-200 focus:ring-slate-400 active:scale-[0.99]',
-    outline: 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:border-slate-300 focus:ring-slate-400 active:scale-[0.99]',
-    ghost: 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 focus:ring-slate-400',
+    primary: 'bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500 shadow-sm hover:shadow active:scale-[0.99]',
+    secondary: 'bg-blue-50 text-blue-800 hover:bg-blue-100 focus:ring-blue-400 active:scale-[0.99]',
+    outline: 'border border-blue-100 bg-white text-slate-700 hover:bg-blue-50 hover:border-blue-200 focus:ring-blue-400 active:scale-[0.99]',
+    ghost: 'text-slate-600 hover:bg-blue-50 hover:text-blue-700 focus:ring-blue-400',
     danger: 'bg-rose-600 text-white hover:bg-rose-700 focus:ring-rose-600 shadow-sm active:scale-[0.99]',
   };
 

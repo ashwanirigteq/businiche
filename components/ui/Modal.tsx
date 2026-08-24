@@ -44,24 +44,24 @@ export function Modal({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs transition-opacity duration-200"
+        className="fixed inset-0 bg-blue-900/40 backdrop-blur-sm transition-opacity duration-200"
         onClick={onClose}
       />
 
       {/* Modal Dialog */}
       <div
-        className={`relative w-full ${maxWidthStyles[maxWidth]} bg-white rounded-xl shadow-xl border border-slate-200 z-10 overflow-hidden transform transition-all duration-200 animate-in fade-in zoom-in-95`}
+        className={`relative w-full ${maxWidthStyles[maxWidth]} max-h-[90vh] flex flex-col bg-white rounded-2xl shadow-xl border border-blue-100 z-10 overflow-hidden transform transition-all duration-200 animate-in fade-in zoom-in-95`}
       >
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-blue-50 shrink-0">
           <h3 className="text-base font-semibold text-slate-900">{title}</h3>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-slate-600 transition-colors p-1 rounded-md hover:bg-slate-100 cursor-pointer"
+            className="text-slate-400 hover:text-blue-600 transition-colors p-1 rounded-md hover:bg-blue-50 cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
-        <div className="p-6">{children}</div>
+        <div className="p-6 overflow-y-auto flex-1">{children}</div>
       </div>
     </div>
   );

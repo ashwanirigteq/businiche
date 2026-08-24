@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
 import { hashPassword, createSessionToken, SESSION_COOKIE_NAME } from '@/lib/auth';
+import { sendSignupNotificationEmail } from '@/lib/email';
 import type { UserRole } from '@/lib/types';
 
 export async function POST(request: Request) {
@@ -83,6 +84,13 @@ export async function POST(request: Request) {
       fullName: newUser.full_name,
       role: 'User' as UserRole,
     });
+
+    // Notify ops@rigteq.com asynchronously
+    sendSignupNotificationEmail({
+      fullName: newUser.full_name,
+      username: newUser.username,
+      created_on: newUser.created_on,
+    }).catch(() => {});
 
     const response = NextResponse.json({
       success: true,

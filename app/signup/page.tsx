@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { Building2, Lock, User, AlertCircle, ArrowRight, UserCheck } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { Logo } from '@/components/Logo';
 
 export default function SignupPage() {
   const router = useRouter();
@@ -65,23 +66,21 @@ export default function SignupPage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8 bg-slate-50">
+    <div className="min-h-screen flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8 bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <div className="flex justify-center">
-          <div className="w-12 h-12 rounded-xl bg-slate-900 flex items-center justify-center text-white shadow-md">
-            <Building2 className="w-6 h-6" />
-          </div>
+          <Logo size="xl" variant="white" showText={false} />
         </div>
-        <h2 className="mt-4 text-center text-2xl font-bold tracking-tight text-slate-900">
-          Create an account
+        <h2 className="mt-4 text-center text-3xl font-bold text-white tracking-tight">
+          Create Account
         </h2>
-        <p className="mt-1 text-center text-sm text-slate-500">
-          Get started with Businiche lead discovery
+        <p className="mt-1 text-center text-sm text-blue-200">
+          Get 1,000 Free Initial Monthly Credits
         </p>
       </div>
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="bg-white py-8 px-6 shadow-sm border border-slate-200 rounded-2xl sm:px-10">
+        <div className="bg-white py-8 px-6 shadow-sm border border-blue-100 rounded-2xl sm:px-10">
           {error && (
             <div className="mb-5 flex items-start gap-3 p-3.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-sm">
               <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />

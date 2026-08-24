@@ -1,20 +1,14 @@
-import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
 export const metadata: Metadata = {
-  title: "Businiche — Business Lead Discovery & Management",
-  description: "Discover, filter, and manage verified local business leads by niche and location.",
+  title: "Businiche — Lead Intelligence Platform",
+  description: "Discover, filter, and manage verified business leads by niche and location.",
+  icons: { icon: "/favicon.ico" },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#1d4ed8",
 };
 
 export default function RootLayout({
@@ -23,8 +17,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
-      <body className="min-h-full flex flex-col bg-slate-50 text-slate-900 font-sans">
+    <html lang="en" className="h-full antialiased">
+      <body className="min-h-full flex flex-col bg-[#f0f6ff] text-slate-900 font-sans">
         {children}
       </body>
     </html>

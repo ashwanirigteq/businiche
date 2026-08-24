@@ -105,3 +105,43 @@ export async function POST(
     return NextResponse.json({ error: 'Failed to add comment' }, { status: 500 });
   }
 }
+
+export async function DELETE(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const session = await getServerSession();
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { searchParams } = new URL(request.url);
+    const commentId = searchParams.get('commentId');
+
+    if (!commentId) {
+      return NextResponse.json({ error: 'commentId query param is required' }, { status: 400 });
+    }
+
+    // Allow user to delete their own comment, or Admin to delete any comment
+    let deleted;
+    if (session.role === 'Admin') {
+      deleted = await sql`DELETE FROM comments WHERE id = ${commentId} RETURNING id;`;
+    } else {
+      deleted = await sql`
+        DELETE FROM comments
+        WHERE id = ${commentId} AND user_id = ${session.userId}
+        RETURNING id;
+      `;
+    }
+
+    if (deleted.length === 0) {
+      return NextResponse.json({ error: 'Comment not found or permission denied.' }, { status: 404 });
+    }
+
+    return NextResponse.json({ success: true, message: 'Comment deleted.' });
+  } catch (err: unknown) {
+    console.error('Delete comment error:', err);
+    return NextResponse.json({ error: 'Failed to delete comment' }, { status: 500 });
+  }
+}
