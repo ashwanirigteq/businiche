@@ -14,13 +14,16 @@ import {
   LogOut,
   AlertTriangle,
   Zap,
+  Bot,
+  Mail,
 } from 'lucide-react';
 import { Logo } from '@/components/Logo';
 import { CreditsModal } from '@/components/CreditsModal';
+import { SalesModal } from '@/components/SalesModal';
 import type { UserRole } from '@/lib/types';
 
 interface NavbarProps {
-  user: {
+  user?: {
     fullName: string;
     username: string;
     role: UserRole;
@@ -29,7 +32,7 @@ interface NavbarProps {
   };
 }
 
-export function Navbar({ user }: NavbarProps) {
+export function Navbar({ user: initialUser }: NavbarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
@@ -37,13 +40,24 @@ export function Navbar({ user }: NavbarProps) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [creditsModalOpen, setCreditsModalOpen] = useState(false);
-  const [currentCredits, setCurrentCredits] = useState<number>(user.credits ?? 1000);
-  const [nextCreditDate, setNextCreditDate] = useState<string | null>(user.nextCreditDate ?? null);
+  const [salesModalOpen, setSalesModalOpen] = useState(false);
+
+  const [userInfo, setUserInfo] = useState<{
+    fullName: string;
+    username: string;
+    role: UserRole;
+  }>({
+    fullName: initialUser?.fullName || 'User',
+    username: initialUser?.username || 'user',
+    role: initialUser?.role || 'User',
+  });
+
+  const [currentCredits, setCurrentCredits] = useState<number>(initialUser?.credits ?? 10000);
+  const [nextCreditDate, setNextCreditDate] = useState<string | null>(initialUser?.nextCreditDate ?? null);
 
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const isAdmin = user.role === 'Admin';
+  const isAdmin = userInfo.role === 'Admin';
 
-  // Fetch updated user credits on load
   const refreshUserData = () => {
     fetch('/api/auth/me')
       .then((r) => r.json())
@@ -51,6 +65,11 @@ export function Navbar({ user }: NavbarProps) {
         if (d.user) {
           if (d.user.credits !== undefined) setCurrentCredits(d.user.credits);
           if (d.user.nextCreditDate !== undefined) setNextCreditDate(d.user.nextCreditDate);
+          setUserInfo({
+            fullName: d.user.fullName || 'User',
+            username: d.user.username || 'user',
+            role: d.user.role || 'User',
+          });
         }
       })
       .catch(() => {});
@@ -59,7 +78,6 @@ export function Navbar({ user }: NavbarProps) {
   useEffect(() => {
     refreshUserData();
 
-    // Event listener for instant credit updates
     const handleCreditUpdate = (e: Event) => {
       const customEvt = e as CustomEvent<{ remaining?: number; nextCreditDate?: string }>;
       if (customEvt.detail?.remaining !== undefined) {
@@ -76,7 +94,6 @@ export function Navbar({ user }: NavbarProps) {
     return () => window.removeEventListener('bn_credits_updated', handleCreditUpdate);
   }, []);
 
-  // Close dropdown on outside click
   useEffect(() => {
     function handler(e: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
@@ -98,7 +115,10 @@ export function Navbar({ user }: NavbarProps) {
     }
   };
 
-  const initials = user.fullName
+  const [leadsDropdownOpen, setLeadsDropdownOpen] = useState(false);
+  const [campaignsDropdownOpen, setCampaignsDropdownOpen] = useState(false);
+
+  const initials = (userInfo.fullName || 'User')
     .split(' ')
     .map((n) => n[0])
     .slice(0, 2)
@@ -106,12 +126,6 @@ export function Navbar({ user }: NavbarProps) {
     .toUpperCase();
 
   const isInfinite = isAdmin || currentCredits === Infinity;
-
-  const navItems = [
-    { label: 'Leads', href: '/', icon: Building2 },
-    { label: 'Generate', href: '/generate-leads', icon: Sparkles },
-    ...(isAdmin ? [{ label: 'Users', href: '/users', icon: Users }] : []),
-  ];
 
   return (
     <>
@@ -126,24 +140,117 @@ export function Navbar({ user }: NavbarProps) {
 
               {/* Desktop Nav */}
               <nav className="hidden md:flex items-center gap-1">
-                {navItems.map((item) => {
-                  const isActive = pathname === item.href;
-                  const Icon = item.icon;
-                  return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-medium transition-all ${
-                        isActive
-                          ? 'bg-blue-600 text-white shadow-sm'
-                          : 'text-slate-600 hover:text-blue-700 hover:bg-blue-50'
-                      }`}
-                    >
-                      <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-blue-400'}`} />
-                      {item.label}
-                    </Link>
-                  );
-                })}
+                {/* Leads Dropdown */}
+                <div
+                  className="relative"
+                  onMouseEnter={() => setLeadsDropdownOpen(true)}
+                  onMouseLeave={() => setLeadsDropdownOpen(false)}
+                >
+                  <Link
+                    href="/"
+                    className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-medium transition-all ${
+                      pathname === '/'
+                        ? 'bg-blue-600 text-white shadow-sm'
+                        : 'text-slate-600 hover:text-blue-700 hover:bg-blue-50'
+                    }`}
+                  >
+                    <Building2 className={`w-4 h-4 ${pathname === '/' ? 'text-white' : 'text-blue-400'}`} />
+                    <span>Leads</span>
+                    <ChevronDown className="w-3.5 h-3.5 opacity-70" />
+                  </Link>
+
+                  {leadsDropdownOpen && (
+                    <div className="absolute left-0 mt-1 w-44 bg-white rounded-xl border border-blue-100 shadow-lg py-1 z-50 animate-in fade-in slide-in-from-top-1">
+                      <Link
+                        href="/"
+                        className="block px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-blue-50 hover:text-blue-700"
+                      >
+                        All Leads
+                      </Link>
+                      <Link
+                        href="/?filter=my_leads"
+                        className="block px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-blue-50 hover:text-blue-700"
+                      >
+                        My Leads
+                      </Link>
+                    </div>
+                  )}
+                </div>
+
+                <Link
+                  href="/generate-leads"
+                  className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-medium transition-all ${
+                    pathname === '/generate-leads'
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : 'text-slate-600 hover:text-blue-700 hover:bg-blue-50'
+                  }`}
+                >
+                  <Sparkles className={`w-4 h-4 ${pathname === '/generate-leads' ? 'text-white' : 'text-blue-400'}`} />
+                  <span>Generate</span>
+                </Link>
+
+                {/* Campaigns Dropdown */}
+                <div
+                  className="relative"
+                  onMouseEnter={() => setCampaignsDropdownOpen(true)}
+                  onMouseLeave={() => setCampaignsDropdownOpen(false)}
+                >
+                  <Link
+                    href="/automate"
+                    className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-medium transition-all ${
+                      pathname === '/automate'
+                        ? 'bg-blue-600 text-white shadow-sm'
+                        : 'text-slate-600 hover:text-blue-700 hover:bg-blue-50'
+                    }`}
+                  >
+                    <Bot className={`w-4 h-4 ${pathname === '/automate' ? 'text-white' : 'text-blue-400'}`} />
+                    <span>Campaigns</span>
+                    <ChevronDown className="w-3.5 h-3.5 opacity-70" />
+                  </Link>
+
+                  {campaignsDropdownOpen && (
+                    <div className="absolute left-0 mt-1 w-44 bg-white rounded-xl border border-blue-100 shadow-lg py-1 z-50 animate-in fade-in slide-in-from-top-1">
+                      <Link
+                        href="/automate"
+                        className="block px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-blue-50 hover:text-blue-700"
+                      >
+                        All Campaigns
+                      </Link>
+                      <Link
+                        href="/automate?filter=my_campaigns"
+                        className="block px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-blue-50 hover:text-blue-700"
+                      >
+                        My Campaigns
+                      </Link>
+                    </div>
+                  )}
+                </div>
+
+                <Link
+                  href="/mailbox"
+                  className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-medium transition-all ${
+                    pathname === '/mailbox'
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : 'text-slate-600 hover:text-blue-700 hover:bg-blue-50'
+                  }`}
+                >
+                  <Mail className={`w-4 h-4 ${pathname === '/mailbox' ? 'text-white' : 'text-blue-400'}`} />
+                  <span>Mailbox</span>
+                </Link>
+
+                {isAdmin && (
+                  <Link
+                    href="/users"
+                    className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-medium transition-all ${
+                      pathname === '/users'
+                        ? 'bg-blue-600 text-white shadow-sm'
+                        : 'text-slate-600 hover:text-blue-700 hover:bg-blue-50'
+                    }`}
+                  >
+                    <Users className="w-4 h-4 text-blue-400" />
+                    <span>Users</span>
+                  </Link>
+                )}
               </nav>
             </div>
 
@@ -169,7 +276,7 @@ export function Navbar({ user }: NavbarProps) {
                   <div className="w-7 h-7 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs font-bold shadow-xs">
                     {initials}
                   </div>
-                  <span className="text-sm font-semibold text-blue-900">{user.fullName}</span>
+                  <span className="text-sm font-semibold text-blue-900">{userInfo.fullName}</span>
                   <ChevronDown
                     className={`w-3.5 h-3.5 text-blue-500 transition-transform ${dropdownOpen ? 'rotate-180' : ''}`}
                   />
@@ -178,11 +285,10 @@ export function Navbar({ user }: NavbarProps) {
                 {dropdownOpen && (
                   <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl border border-blue-100 shadow-xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-150">
                     <div className="px-4 py-3 border-b border-blue-50 bg-blue-50/40">
-                      <p className="text-xs font-bold text-blue-950">{user.fullName}</p>
+                      <p className="text-xs font-bold text-blue-950">{userInfo.fullName}</p>
                       <p className="text-[11px] text-blue-600 mt-0.5 font-mono">
-                        @{user.username} · {user.role}
+                        @{userInfo.username} · {userInfo.role}
                       </p>
-                      {/* Credit display in dropdown */}
                       <button
                         onClick={() => {
                           setDropdownOpen(false);
@@ -247,25 +353,80 @@ export function Navbar({ user }: NavbarProps) {
         {mobileMenuOpen && (
           <div className="md:hidden border-t border-blue-100 bg-white px-4 pt-3 pb-4 space-y-3">
             <div className="space-y-1">
-              {navItems.map((item) => {
-                const isActive = pathname === item.href;
-                const Icon = item.icon;
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    onClick={() => setMobileMenuOpen(false)}
-                    className={`flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-sm font-medium ${
-                      isActive
-                        ? 'bg-blue-600 text-white shadow-xs'
-                        : 'text-slate-600 hover:bg-blue-50 hover:text-blue-700'
-                    }`}
-                  >
-                    <Icon className="w-4 h-4" />
-                    {item.label}
-                  </Link>
-                );
-              })}
+              <Link
+                href="/"
+                onClick={() => setMobileMenuOpen(false)}
+                className={`flex items-center gap-2.5 px-3.5 py-2 rounded-xl text-sm font-medium ${
+                  pathname === '/' ? 'bg-blue-600 text-white' : 'text-slate-700 hover:bg-blue-50'
+                }`}
+              >
+                <Building2 className="w-4 h-4" />
+                <span>All Leads</span>
+              </Link>
+
+              <Link
+                href="/?filter=my_leads"
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex items-center gap-2.5 px-3.5 py-2 rounded-xl text-sm font-medium text-slate-700 hover:bg-blue-50"
+              >
+                <Building2 className="w-4 h-4 text-blue-400" />
+                <span>My Leads</span>
+              </Link>
+
+              <Link
+                href="/generate-leads"
+                onClick={() => setMobileMenuOpen(false)}
+                className={`flex items-center gap-2.5 px-3.5 py-2 rounded-xl text-sm font-medium ${
+                  pathname === '/generate-leads' ? 'bg-blue-600 text-white' : 'text-slate-700 hover:bg-blue-50'
+                }`}
+              >
+                <Sparkles className="w-4 h-4" />
+                <span>Generate</span>
+              </Link>
+
+              <Link
+                href="/automate"
+                onClick={() => setMobileMenuOpen(false)}
+                className={`flex items-center gap-2.5 px-3.5 py-2 rounded-xl text-sm font-medium ${
+                  pathname === '/automate' ? 'bg-blue-600 text-white' : 'text-slate-700 hover:bg-blue-50'
+                }`}
+              >
+                <Bot className="w-4 h-4" />
+                <span>All Campaigns</span>
+              </Link>
+
+              <Link
+                href="/automate?filter=my_campaigns"
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex items-center gap-2.5 px-3.5 py-2 rounded-xl text-sm font-medium text-slate-700 hover:bg-blue-50"
+              >
+                <Bot className="w-4 h-4 text-blue-400" />
+                <span>My Campaigns</span>
+              </Link>
+
+              <Link
+                href="/mailbox"
+                onClick={() => setMobileMenuOpen(false)}
+                className={`flex items-center gap-2.5 px-3.5 py-2 rounded-xl text-sm font-medium ${
+                  pathname === '/mailbox' ? 'bg-blue-600 text-white' : 'text-slate-700 hover:bg-blue-50'
+                }`}
+              >
+                <Mail className="w-4 h-4" />
+                <span>Mailbox</span>
+              </Link>
+
+              {isAdmin && (
+                <Link
+                  href="/users"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className={`flex items-center gap-2.5 px-3.5 py-2 rounded-xl text-sm font-medium ${
+                    pathname === '/users' ? 'bg-blue-600 text-white' : 'text-slate-700 hover:bg-blue-50'
+                  }`}
+                >
+                  <Users className="w-4 h-4" />
+                  <span>Users</span>
+                </Link>
+              )}
             </div>
 
             <div className="pt-3 border-t border-blue-50 space-y-1">
@@ -297,8 +458,15 @@ export function Navbar({ user }: NavbarProps) {
         isOpen={creditsModalOpen}
         onClose={() => setCreditsModalOpen(false)}
         credits={currentCredits}
-        role={user.role}
+        role={userInfo.role}
         nextCreditDate={nextCreditDate}
+        onOpenSalesModal={() => setSalesModalOpen(true)}
+      />
+
+      {/* Sales Modal */}
+      <SalesModal
+        isOpen={salesModalOpen}
+        onClose={() => setSalesModalOpen(false)}
       />
 
       {/* Logout Confirmation Dialog */}

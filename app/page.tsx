@@ -112,6 +112,10 @@ export default function DashboardPage() {
     setError(null);
     try {
       const params = new URLSearchParams();
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('filter') === 'my_leads') {
+        params.set('myLeads', 'true');
+      }
       if (searchQuery.trim()) params.set('q', searchQuery.trim());
       if (selectedIndustry) params.set('industry', selectedIndustry);
       if (selectedStatus) params.set('status', selectedStatus);

@@ -3,7 +3,7 @@
 import React from 'react';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
-import { Zap, CreditCard, Mail, ExternalLink, ShieldCheck, Clock } from 'lucide-react';
+import { Zap, CreditCard, Mail, ShieldCheck, Clock } from 'lucide-react';
 
 interface CreditsModalProps {
   isOpen: boolean;
@@ -11,13 +11,27 @@ interface CreditsModalProps {
   credits: number;
   role: string;
   nextCreditDate?: string | null;
+  onOpenSalesModal?: () => void;
 }
 
-export function CreditsModal({ isOpen, onClose, credits, role, nextCreditDate }: CreditsModalProps) {
+export function CreditsModal({
+  isOpen,
+  onClose,
+  credits,
+  role,
+  nextCreditDate,
+  onOpenSalesModal,
+}: CreditsModalProps) {
   const isInfinite = role === 'Admin' || credits === Infinity;
 
   const formattedNextDate = nextCreditDate
-    ? new Date(nextCreditDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    ? new Date(nextCreditDate).toLocaleString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      })
     : null;
 
   return (
@@ -30,7 +44,7 @@ export function CreditsModal({ isOpen, onClose, credits, role, nextCreditDate }:
               Current Balance
             </span>
             <span className="px-2.5 py-1 rounded-full bg-white/15 text-xs font-semibold backdrop-blur border border-white/20">
-              Monthly Auto-Reset
+              10,000 Weekly Free Refill
             </span>
           </div>
           <div className="mt-3 flex items-baseline gap-2">
@@ -40,11 +54,11 @@ export function CreditsModal({ isOpen, onClose, credits, role, nextCreditDate }:
             <span className="text-sm text-blue-200">Credits Available</span>
           </div>
           <p className="text-xs text-blue-100 mt-2 flex items-center gap-1.5">
-            <Clock className="w-3.5 h-3.5" />
+            <Clock className="w-3.5 h-3.5 shrink-0" />
             <span>
               {formattedNextDate
-                ? `Next Renewal Date: ${formattedNextDate} (Resets to 1,000 Credits)`
-                : 'Resets every 30 days to 1,000 monthly credits.'}
+                ? `Next Weekly Refresh: ${formattedNextDate} (Resets to 10,000 Cr)`
+                : 'Resets every 7 days to 10,000 weekly credits.'}
             </span>
           </p>
         </div>
@@ -82,26 +96,22 @@ export function CreditsModal({ isOpen, onClose, credits, role, nextCreditDate }:
             </h4>
           </div>
           <p className="text-xs text-slate-600 leading-relaxed">
-            Need more leads for your growth campaigns? You can wait until your next monthly renewal date, or purchase instant extra credit packs.
+            Need extra lead capacity for your campaigns? Request an instant payment invoice link for 10,000 or 100,000 extra credit packs.
           </p>
 
           <div className="flex flex-col sm:flex-row gap-2 pt-1">
-            <a
-              href="https://razorpay.me/@rigteq"
-              target="_blank"
-              rel="noopener noreferrer"
+            <Button
+              variant="primary"
+              size="md"
               className="flex-1"
+              onClick={() => {
+                onClose();
+                if (onOpenSalesModal) onOpenSalesModal();
+              }}
+              leftIcon={<CreditCard className="w-4 h-4" />}
             >
-              <Button
-                variant="primary"
-                size="md"
-                className="w-full"
-                leftIcon={<CreditCard className="w-4 h-4" />}
-                rightIcon={<ExternalLink className="w-3.5 h-3.5" />}
-              >
-                Instant Credit Top-Up
-              </Button>
-            </a>
+              Instant Credit Top-Up
+            </Button>
             <a href="mailto:ops@rigteq.com?subject=Credit%20Refill%20Request" className="flex-1">
               <Button
                 variant="outline"

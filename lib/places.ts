@@ -39,7 +39,7 @@ async function fetchLegacyPlaceDetails(placeId: string, apiKey: string): Promise
 }
 
 /**
- * Search Google Places using Places API (New) with pagination up to requested limit (e.g. 10, 20, 50, 100)
+ * Search Google Places using Places API (New) with multi-page pagination up to requested limit (30, 50, 100)
  */
 async function searchPlacesNew(query: string, apiKey: string, limit: number): Promise<NormalizedPlace[]> {
   const url = 'https://places.googleapis.com/v1/places:searchText';
@@ -96,57 +96,55 @@ async function searchPlacesNew(query: string, apiKey: string, limit: number): Pr
       break;
     }
     pageToken = data.nextPageToken;
-    // Brief sleep to avoid rate limits between pages
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    // Short sleep between page tokens as per Google API specifications
+    await new Promise((resolve) => setTimeout(resolve, 600));
   }
 
   return results;
 }
 
 /**
- * Search Google Places using Legacy Text Search
+ * Search Google Places using Legacy Text Search with pagination support
  */
 async function searchPlacesLegacy(query: string, apiKey: string, limit: number): Promise<NormalizedPlace[]> {
-  const searchUrl = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(query)}&key=${apiKey}`;
-  const response = await fetch(searchUrl, { signal: AbortSignal.timeout(10000) });
-  
-  if (!response.ok) {
-    throw new Error(`Legacy Places API error: HTTP ${response.status}`);
-  }
+  const targetLimit = Math.min(Math.max(limit, 1), 100);
+  const allResults: NormalizedPlace[] = [];
+  let nextPageToken: string | null = null;
 
-  const data = await response.json();
+  do {
+    let searchUrl = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(query)}&key=${apiKey}`;
+    if (nextPageToken) {
+      searchUrl += `&pagetoken=${encodeURIComponent(nextPageToken)}`;
+      // Google Legacy API requires ~1.5s delay before nextPageToken becomes active
+      await new Promise((r) => setTimeout(r, 1800));
+    }
 
-  if (data.status === 'ZERO_RESULTS') {
-    return [];
-  }
+    const response = await fetch(searchUrl, { signal: AbortSignal.timeout(10000) });
+    if (!response.ok) break;
 
-  if (data.status === 'REQUEST_DENIED') {
-    throw new Error(`Legacy Places API error (REQUEST_DENIED): ${data.error_message || 'Access Denied'}`);
-  }
+    const data = await response.json();
+    if (data.status !== 'OK' || !data.results) break;
 
-  if (data.status === 'OVER_QUERY_LIMIT') {
-    throw new Error('Google Places API quota exceeded. Please try again later.');
-  }
+    const placesToFetch = data.results.slice(0, Math.min(targetLimit - allResults.length, 20));
+    const detailsPromises = placesToFetch.map(async (p: { place_id: string; name: string; formatted_address?: string }) => {
+      const details = await fetchLegacyPlaceDetails(p.place_id, apiKey);
+      return {
+        place_id: p.place_id,
+        name: details.name || p.name,
+        formatted_address: details.formatted_address || p.formatted_address,
+        website: details.website,
+        phone: details.phone,
+        source_url: details.source_url,
+      };
+    });
 
-  if (data.status !== 'OK' || !data.results) {
-    throw new Error(`Google Places API status ${data.status}: ${data.error_message || 'No results'}`);
-  }
+    const pageResults = await Promise.all(detailsPromises);
+    allResults.push(...pageResults);
 
-  const placesToFetch = data.results.slice(0, Math.min(limit, 100));
+    nextPageToken = data.next_page_token || null;
+  } while (nextPageToken && allResults.length < targetLimit);
 
-  const detailsPromises = placesToFetch.map(async (p: { place_id: string; name: string; formatted_address?: string }) => {
-    const details = await fetchLegacyPlaceDetails(p.place_id, apiKey);
-    return {
-      place_id: p.place_id,
-      name: details.name || p.name,
-      formatted_address: details.formatted_address || p.formatted_address,
-      website: details.website,
-      phone: details.phone,
-      source_url: details.source_url,
-    };
-  });
-
-  return await Promise.all(detailsPromises);
+  return allResults;
 }
 
 /**
@@ -155,11 +153,12 @@ async function searchPlacesLegacy(query: string, apiKey: string, limit: number):
 export async function discoverGooglePlacesLeads(
   niche: string,
   location: string,
-  limit: number = 10
+  limit: number = 10,
+  customApiKey?: string
 ): Promise<LeadDiscoveryResult> {
-  const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+  const apiKey = customApiKey?.trim();
   if (!apiKey) {
-    throw new Error('GOOGLE_MAPS_API_KEY is not configured in .env.local');
+    throw new Error('Google Places API Key is not configured. Please add custom_places_api_key in Profile or configure GOOGLE_MAPS_API_KEY.');
   }
 
   const cleanNiche = niche.trim();
@@ -184,13 +183,7 @@ export async function discoverGooglePlacesLeads(
 
       if (newErrMsg.includes('API key not valid') || newErrMsg.includes('API_KEY_INVALID')) {
         throw new Error(
-          'Google Places API Error: The provided GOOGLE_MAPS_API_KEY is invalid or not activated. Please enable "Places API (New)" and ensure billing is active in Google Cloud Console.'
-        );
-      }
-
-      if (legacyErrMsg.includes('REQUEST_DENIED') || legacyErrMsg.includes('LegacyApiNotActivatedMapError')) {
-        throw new Error(
-          'Google Cloud Configuration Required: The Google Cloud project has not enabled Places API. Enable "Places API (New)" in Google Cloud Console.'
+          'Google Places API Error: The provided API key is invalid or not activated. Please ensure "Places API (New)" is enabled in Google Cloud Console.'
         );
       }
 
@@ -251,31 +244,49 @@ export async function saveLeadToDatabase(lead: DiscoveredLead, userId?: string):
   const companyName = lead.company_name.trim();
   const address = lead.address ? lead.address.trim() : null;
 
-  const inserted = await sql`
-    INSERT INTO leads (company_name, website, phone, email, address, industry, status, source, source_url, created_by)
-    VALUES (
-      ${companyName},
-      ${lead.website || null},
-      ${lead.phone || null},
-      ${lead.email || null},
-      ${address},
-      ${lead.industry},
-      ${lead.status || 'New'},
-      ${lead.source || 'Google Places'},
-      ${lead.source_url || null},
-      ${userId || null}
-    )
-    ON CONFLICT (LOWER(TRIM(company_name)), LOWER(TRIM(COALESCE(address, ''))))
-    DO UPDATE SET
-      website = EXCLUDED.website,
-      phone = EXCLUDED.phone,
-      email = COALESCE(EXCLUDED.email, leads.email),
-      status = leads.status,
-      created_by = COALESCE(leads.created_by, EXCLUDED.created_by)
-    RETURNING id, company_name, website, phone, email, address, industry, status, source, source_url, created_on, created_by;
-  `;
+  try {
+    const existing = await sql`
+      SELECT id, website, phone, email, additional_emails, additional_phones FROM leads
+      WHERE LOWER(TRIM(company_name)) = LOWER(TRIM(${companyName}))
+        AND LOWER(TRIM(COALESCE(address, ''))) = LOWER(TRIM(COALESCE(${address}, '')))
+      LIMIT 1;
+    `;
 
-  return inserted[0] as unknown as Lead;
+    if (existing.length > 0) {
+      const existingId = existing[0].id;
+      const updated = await sql`
+        UPDATE leads
+        SET website = COALESCE(${lead.website || null}, website),
+            phone = COALESCE(${lead.phone || null}, phone),
+            email = COALESCE(${lead.email || null}, email)
+        WHERE id = ${existingId}
+        RETURNING id, company_name, website, phone, email, address, industry, status, source, source_url, created_on, created_by, additional_emails, additional_phones;
+      `;
+      return updated[0] as unknown as Lead;
+    }
+
+    const inserted = await sql`
+      INSERT INTO leads (company_name, website, phone, email, address, industry, status, source, source_url, created_by)
+      VALUES (
+        ${companyName},
+        ${lead.website || null},
+        ${lead.phone || null},
+        ${lead.email || null},
+        ${address},
+        ${lead.industry},
+        ${lead.status || 'New'},
+        ${lead.source || 'Google Places'},
+        ${lead.source_url || null},
+        ${userId || null}
+      )
+      RETURNING id, company_name, website, phone, email, address, industry, status, source, source_url, created_on, created_by, additional_emails, additional_phones;
+    `;
+
+    return inserted[0] as unknown as Lead;
+  } catch (err) {
+    console.error('Error saving lead to database:', companyName, err);
+    throw err;
+  }
 }
 
 /**

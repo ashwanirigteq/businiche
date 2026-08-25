@@ -50,7 +50,7 @@ export default function UsersPage() {
   const [newUsername, setNewUsername] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [newRole, setNewRole] = useState<UserRole>('User');
-  const [newCredits, setNewCredits] = useState('1000');
+  const [newCredits, setNewCredits] = useState('10000');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [modalError, setModalError] = useState<string | null>(null);
 
@@ -59,7 +59,7 @@ export default function UsersPage() {
   const [editFullName, setEditFullName] = useState('');
   const [editRole, setEditRole] = useState<UserRole>('User');
   const [editPassword, setEditPassword] = useState('');
-  const [editCredits, setEditCredits] = useState('1000');
+  const [editCredits, setEditCredits] = useState('10000');
 
   // Delete Confirm Modal
   const [deletingUser, setDeletingUser] = useState<UserItem | null>(null);
@@ -113,7 +113,7 @@ export default function UsersPage() {
           username: newUsername.trim(),
           password: newPassword,
           role: newRole,
-          credits: parseInt(newCredits, 10) || 1000,
+          credits: parseInt(newCredits, 10) || 10000,
         }),
       });
       const data = await res.json();
@@ -184,7 +184,7 @@ export default function UsersPage() {
     setEditFullName(u.full_name);
     setEditRole(u.role_name);
     setEditPassword('');
-    setEditCredits(String(u.credits ?? 1000));
+    setEditCredits(String(u.credits ?? 10000));
   };
 
   const formatDate = (d: string) => {

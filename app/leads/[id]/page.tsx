@@ -198,6 +198,94 @@ export default function LeadDetailsPage({
     }
   };
 
+  // Update lead fields in DB
+  const updateLeadFields = async (patchData: Partial<Lead> & { additional_emails?: string[]; additional_phones?: string[] }) => {
+    try {
+      const res = await fetch(`/api/leads/${leadId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patchData),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to update lead');
+      setLead(data.lead);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Update failed');
+    }
+  };
+
+  // Edit specific email item in-place
+  const handleEditEmailItem = async (oldEmail: string) => {
+    const newEmail = prompt('Edit email address:', oldEmail);
+    if (newEmail === null || newEmail.trim() === oldEmail) return;
+    const cleanNew = newEmail.trim();
+
+    if (!lead) return;
+    let mainEmail = lead.email;
+    let extraEmails = Array.isArray(lead.additional_emails) ? [...lead.additional_emails] : [];
+
+    if (mainEmail === oldEmail) {
+      mainEmail = cleanNew || null;
+    } else {
+      extraEmails = extraEmails.map((e) => (e === oldEmail ? cleanNew : e)).filter(Boolean);
+    }
+
+    await updateLeadFields({ email: mainEmail, additional_emails: extraEmails });
+  };
+
+  // Delete specific email item in-place
+  const handleDeleteEmailItem = async (targetEmail: string) => {
+    if (!confirm(`Delete email address "${targetEmail}"?`)) return;
+
+    if (!lead) return;
+    let mainEmail = lead.email;
+    let extraEmails = Array.isArray(lead.additional_emails) ? [...lead.additional_emails] : [];
+
+    if (mainEmail === targetEmail) {
+      mainEmail = extraEmails.length > 0 ? extraEmails.shift()! : null;
+    } else {
+      extraEmails = extraEmails.filter((e) => e !== targetEmail);
+    }
+
+    await updateLeadFields({ email: mainEmail, additional_emails: extraEmails });
+  };
+
+  // Edit specific phone item in-place
+  const handleEditPhoneItem = async (oldPhone: string) => {
+    const newPhone = prompt('Edit phone number:', oldPhone);
+    if (newPhone === null || newPhone.trim() === oldPhone) return;
+    const cleanNew = newPhone.trim();
+
+    if (!lead) return;
+    let mainPhone = lead.phone;
+    let extraPhones = Array.isArray(lead.additional_phones) ? [...lead.additional_phones] : [];
+
+    if (mainPhone === oldPhone) {
+      mainPhone = cleanNew || null;
+    } else {
+      extraPhones = extraPhones.map((p) => (p === oldPhone ? cleanNew : p)).filter(Boolean);
+    }
+
+    await updateLeadFields({ phone: mainPhone, additional_phones: extraPhones });
+  };
+
+  // Delete specific phone item in-place
+  const handleDeletePhoneItem = async (targetPhone: string) => {
+    if (!confirm(`Delete phone number "${targetPhone}"?`)) return;
+
+    if (!lead) return;
+    let mainPhone = lead.phone;
+    let extraPhones = Array.isArray(lead.additional_phones) ? [...lead.additional_phones] : [];
+
+    if (mainPhone === targetPhone) {
+      mainPhone = extraPhones.length > 0 ? extraPhones.shift()! : null;
+    } else {
+      extraPhones = extraPhones.filter((p) => p !== targetPhone);
+    }
+
+    await updateLeadFields({ phone: mainPhone, additional_phones: extraPhones });
+  };
+
   // Save edited contact details & additional emails/phones
   const handleSaveContactEdit = async () => {
     if (!lead) return;
@@ -441,19 +529,38 @@ export default function LeadDetailsPage({
                 <div className="space-y-1.5">
                   <span className="text-blue-500 font-bold uppercase tracking-wider text-[10px] block">Emails ({allEmails.length})</span>
                   {allEmails.length > 0 ? (
-                    <div className="space-y-1">
+                    <div className="space-y-1.5">
                       {allEmails.map((em, idx) => (
-                        <button
-                          key={em}
-                          type="button"
-                          onClick={() => openEmailModalFor(em)}
-                          title={em}
-                          className="w-full text-left inline-flex items-center gap-1.5 text-blue-700 font-medium hover:underline text-xs"
-                        >
-                          <Mail className="w-3.5 h-3.5 shrink-0 text-blue-500" />
-                          <span className="truncate">{truncate(em, 22)}</span>
-                          {idx === 0 && <span className="text-[9px] bg-blue-100 text-blue-700 px-1 py-0.2 rounded">main</span>}
-                        </button>
+                        <div key={em} className="group flex items-center justify-between gap-1 py-0.5 border-b border-blue-50/60 last:border-0">
+                          <button
+                            type="button"
+                            onClick={() => openEmailModalFor(em)}
+                            title={em}
+                            className="inline-flex items-center gap-1.5 text-blue-700 font-medium hover:underline text-xs truncate flex-1 text-left"
+                          >
+                            <Mail className="w-3.5 h-3.5 shrink-0 text-blue-500" />
+                            <span className="truncate">{truncate(em, 20)}</span>
+                            {idx === 0 && <span className="text-[9px] bg-blue-100 text-blue-700 px-1 py-0.2 rounded shrink-0">main</span>}
+                          </button>
+                          <div className="flex items-center gap-0.5 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => handleEditEmailItem(em)}
+                              className="p-1 rounded hover:bg-blue-100 text-blue-600 transition-colors cursor-pointer"
+                              title="Edit Email"
+                            >
+                              <Edit2 className="w-3 h-3" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteEmailItem(em)}
+                              className="p-1 rounded hover:bg-rose-100 text-rose-600 transition-colors cursor-pointer"
+                              title="Delete Email"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </div>
+                        </div>
                       ))}
                     </div>
                   ) : (
@@ -465,17 +572,36 @@ export default function LeadDetailsPage({
                 <div className="space-y-1.5">
                   <span className="text-blue-500 font-bold uppercase tracking-wider text-[10px] block">Phones ({allPhones.length})</span>
                   {allPhones.length > 0 ? (
-                    <div className="space-y-1">
+                    <div className="space-y-1.5">
                       {allPhones.map((ph, idx) => (
-                        <a
-                          key={ph}
-                          href={`tel:${ph}`}
-                          className="w-full inline-flex items-center gap-1.5 text-slate-800 font-mono font-medium hover:underline text-xs"
-                        >
-                          <Phone className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-                          <span>{ph}</span>
-                          {idx === 0 && <span className="text-[9px] bg-slate-100 text-slate-600 px-1 py-0.2 rounded font-sans">main</span>}
-                        </a>
+                        <div key={ph} className="group flex items-center justify-between gap-1 py-0.5 border-b border-slate-50 last:border-0">
+                          <a
+                            href={`tel:${ph}`}
+                            className="inline-flex items-center gap-1.5 text-slate-800 font-mono font-medium hover:underline text-xs truncate flex-1 text-left"
+                          >
+                            <Phone className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                            <span className="truncate">{ph}</span>
+                            {idx === 0 && <span className="text-[9px] bg-slate-100 text-slate-600 px-1 py-0.2 rounded font-sans shrink-0">main</span>}
+                          </a>
+                          <div className="flex items-center gap-0.5 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => handleEditPhoneItem(ph)}
+                              className="p-1 rounded hover:bg-blue-100 text-blue-600 transition-colors cursor-pointer"
+                              title="Edit Phone"
+                            >
+                              <Edit2 className="w-3 h-3" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeletePhoneItem(ph)}
+                              className="p-1 rounded hover:bg-rose-100 text-rose-600 transition-colors cursor-pointer"
+                              title="Delete Phone"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </div>
+                        </div>
                       ))}
                     </div>
                   ) : (

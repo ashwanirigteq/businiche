@@ -2,12 +2,12 @@ import { sql } from './db';
 import type { UserRole } from './types';
 
 export const CREDIT_COSTS = {
-  GENERATE_PER_LEAD: 10, // 30 leads = 300 credits
+  GENERATE_PER_LEAD: 10,
   EMAIL_PER_LEAD: 5,
   ENHANCE_PER_LEAD: 5,
 } as const;
 
-export const INITIAL_MONTHLY_CREDITS = 1000;
+export const INITIAL_WEEKLY_CREDITS = 10000;
 
 export interface UserCreditInfo {
   credits: number;
@@ -23,7 +23,7 @@ export interface CreditCheckResult {
 }
 
 /**
- * Get current credits and next credit reset date for user with automatic 30-day monthly reset logic.
+ * Get current credits and next credit reset date for user with automatic 7-day weekly reset logic (10,000 free weekly credits).
  * Admins receive Infinity credits.
  */
 export async function getUserCreditDetails(userId: string, role: UserRole): Promise<UserCreditInfo> {
@@ -46,21 +46,21 @@ export async function getUserCreditDetails(userId: string, role: UserRole): Prom
 
     const { credits, last_credit_reset, next_credit_date } = result[0];
     const lastResetDate = last_credit_reset ? new Date(last_credit_reset) : new Date(0);
-    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
-    // Auto-reset monthly credits if 30 days passed
-    if (lastResetDate < thirtyDaysAgo) {
+    // Auto-reset weekly credits if 7 days passed
+    if (lastResetDate < sevenDaysAgo) {
       const updated = await sql`
         UPDATE users
-        SET credits = ${INITIAL_MONTHLY_CREDITS},
+        SET credits = ${INITIAL_WEEKLY_CREDITS},
             last_credit_reset = CURRENT_TIMESTAMP,
-            next_credit_date = CURRENT_TIMESTAMP + INTERVAL '30 days'
+            next_credit_date = CURRENT_TIMESTAMP + INTERVAL '7 days'
         WHERE id = ${userId}
         RETURNING credits, last_credit_reset, next_credit_date;
       `;
       const row = updated[0];
       return {
-        credits: INITIAL_MONTHLY_CREDITS,
+        credits: INITIAL_WEEKLY_CREDITS,
         lastCreditReset: row?.last_credit_reset ? new Date(row.last_credit_reset).toISOString() : null,
         nextCreditDate: row?.next_credit_date ? new Date(row.next_credit_date).toISOString() : null,
       };
@@ -69,7 +69,7 @@ export async function getUserCreditDetails(userId: string, role: UserRole): Prom
     // Ensure next_credit_date exists if null
     let finalNextCreditDate = next_credit_date;
     if (!finalNextCreditDate && last_credit_reset) {
-      const computedNext = new Date(new Date(last_credit_reset).getTime() + 30 * 24 * 60 * 60 * 1000);
+      const computedNext = new Date(new Date(last_credit_reset).getTime() + 7 * 24 * 60 * 60 * 1000);
       finalNextCreditDate = computedNext.toISOString();
       await sql`UPDATE users SET next_credit_date = ${finalNextCreditDate} WHERE id = ${userId};`;
     }
@@ -123,13 +123,12 @@ export async function deductUserCredits(
     const updated = await sql`
       UPDATE users
       SET credits = GREATEST(0, credits - ${amount}),
-          next_credit_date = COALESCE(next_credit_date, CURRENT_TIMESTAMP + INTERVAL '30 days')
+          next_credit_date = COALESCE(next_credit_date, CURRENT_TIMESTAMP + INTERVAL '7 days')
       WHERE id = ${userId} AND credits >= ${amount}
       RETURNING credits, next_credit_date;
     `;
 
     if (updated.length === 0) {
-      // Failed atomic check (race condition / spent elsewhere)
       const fresh = await getUserCreditDetails(userId, role);
       return {
         success: false,
@@ -154,4 +153,3 @@ export async function deductUserCredits(
     };
   }
 }
-

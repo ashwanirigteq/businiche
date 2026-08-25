@@ -21,6 +21,26 @@ export async function POST(request: Request) {
       );
     }
 
+    // Fetch user details for signature & custom SMTP
+    let userFullName = session.fullName;
+    let userCompanyName = 'Demo';
+    let userEmail = '';
+    let userEmailPassword = '';
+    let userSmtpHost = '';
+    let userSmtpPort: number | undefined = undefined;
+
+    try {
+      const uRes = await sql`SELECT full_name, company_name, email, email_password, smtp_host, smtp_port FROM users WHERE id = ${session.userId} LIMIT 1;`;
+      if (uRes.length > 0) {
+        userFullName = uRes[0].full_name || session.fullName;
+        userCompanyName = uRes[0].company_name || 'Demo';
+        userEmail = uRes[0].email || '';
+        userEmailPassword = uRes[0].email_password || '';
+        userSmtpHost = uRes[0].smtp_host || '';
+        userSmtpPort = uRes[0].smtp_port || 465;
+      }
+    } catch {}
+
     // Deduct 5 credits for email outreach
     const creditResult = await deductUserCredits(
       session.userId,
@@ -43,16 +63,36 @@ export async function POST(request: Request) {
     const finalCompanyName = companyName?.trim() || 'Valued Partner';
 
     // Send email via SMTP
-    const emailResult = await sendLeadOfferEmail({
-      to: to.trim(),
-      companyName: finalCompanyName,
-      contactName: contactName?.trim(),
-      industry: industry?.trim(),
-      customSubject,
-      customBody,
-    });
+    let emailResult;
+    try {
+      emailResult = await sendLeadOfferEmail({
+        to: to.trim(),
+        companyName: finalCompanyName,
+        contactName: contactName?.trim(),
+        industry: industry?.trim(),
+        customSubject,
+        customBody,
+        userFullName,
+        userCompanyName,
+        userEmail,
+        userEmailPassword,
+        userSmtpHost,
+        userSmtpPort,
+        userId: session.userId,
+      });
+    } catch (sendErr: unknown) {
+      console.error('SMTP sending failure:', sendErr);
+      const rawErrMsg = sendErr instanceof Error ? sendErr.message : String(sendErr);
+      return NextResponse.json(
+        {
+          error: `Email delivery failed (${rawErrMsg}). Please add or verify your Email, SMTP Host, SMTP Port, and Password in your Profile Page.`,
+          requiresProfileUpdate: true,
+        },
+        { status: 400 }
+      );
+    }
 
-    // If leadId is provided, record an activity comment and update status
+    // Record activity comment and update status
     if (leadId) {
       try {
         await sql`
@@ -61,7 +101,7 @@ export async function POST(request: Request) {
             ${leadId},
             ${session.userId},
             'Follow Up',
-            ${`Sent Rigteq Software strategic collaboration offer email to ${to.trim()}`}
+            ${`Sent outreach offer email to ${to.trim()}`}
           );
         `;
 

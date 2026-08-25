@@ -15,44 +15,52 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { leadIds, customSubject, customBody } = body;
 
+    // Fetch user profile SMTP credentials
+    let userFullName = session.fullName;
+    let userCompanyName = 'Demo';
+    let userEmail = '';
+    let userEmailPassword = '';
+    let userSmtpHost = '';
+    let userSmtpPort: number | undefined = undefined;
+
+    try {
+      const uRes = await sql`SELECT full_name, company_name, email, email_password, smtp_host, smtp_port FROM users WHERE id = ${session.userId} LIMIT 1;`;
+      if (uRes.length > 0) {
+        userFullName = uRes[0].full_name || session.fullName;
+        userCompanyName = uRes[0].company_name || 'Demo';
+        userEmail = uRes[0].email || '';
+        userEmailPassword = uRes[0].email_password || '';
+        userSmtpHost = uRes[0].smtp_host || '';
+        userSmtpPort = uRes[0].smtp_port || 465;
+      }
+    } catch {}
+
+    if (!userEmail || !userEmailPassword || !userSmtpHost) {
+      return NextResponse.json(
+        {
+          error: 'Bulk email campaign failed: Your Email SMTP credentials (Email, Host, Port, Password) are missing. Please add them in your Profile Page.',
+          requiresProfileUpdate: true,
+        },
+        { status: 400 }
+      );
+    }
+
     let targetLeads: Lead[] = [];
 
-    const isAdmin = session.role === 'Admin';
-    const userId = session.userId;
-
     if (Array.isArray(leadIds) && leadIds.length > 0) {
-      let result;
-      if (isAdmin) {
-        result = await sql`
-          SELECT id, company_name, website, phone, email, address, industry, status, source, source_url, created_on
-          FROM leads
-          WHERE id = ANY(${leadIds}) AND email IS NOT NULL AND email != '';
-        `;
-      } else {
-        result = await sql`
-          SELECT id, company_name, website, phone, email, address, industry, status, source, source_url, created_on
-          FROM leads
-          WHERE id = ANY(${leadIds}) AND created_by = ${userId} AND email IS NOT NULL AND email != '';
-        `;
-      }
+      const result = await sql`
+        SELECT id, company_name, website, phone, email, address, industry, status, source, source_url, created_on
+        FROM leads
+        WHERE id = ANY(${leadIds}) AND email IS NOT NULL AND email != '';
+      `;
       targetLeads = result as unknown as Lead[];
     } else {
-      let result;
-      if (isAdmin) {
-        result = await sql`
-          SELECT id, company_name, website, phone, email, address, industry, status, source, source_url, created_on
-          FROM leads
-          WHERE email IS NOT NULL AND email != ''
-          ORDER BY created_on DESC;
-        `;
-      } else {
-        result = await sql`
-          SELECT id, company_name, website, phone, email, address, industry, status, source, source_url, created_on
-          FROM leads
-          WHERE created_by = ${userId} AND email IS NOT NULL AND email != ''
-          ORDER BY created_on DESC;
-        `;
-      }
+      const result = await sql`
+        SELECT id, company_name, website, phone, email, address, industry, status, source, source_url, created_on
+        FROM leads
+        WHERE email IS NOT NULL AND email != ''
+        ORDER BY created_on DESC;
+      `;
       targetLeads = result as unknown as Lead[];
     }
 
@@ -101,6 +109,13 @@ export async function POST(request: Request) {
           industry: lead.industry,
           customSubject,
           customBody,
+          userFullName,
+          userCompanyName,
+          userEmail,
+          userEmailPassword,
+          userSmtpHost,
+          userSmtpPort,
+          userId: session.userId,
         });
 
         sentCount++;
@@ -113,7 +128,7 @@ export async function POST(request: Request) {
               ${lead.id},
               ${session.userId},
               'Follow Up',
-              ${`Sent Rigteq Software collaboration offer email in bulk campaign to ${lead.email.trim()}`}
+              ${`Sent outreach offer email in bulk campaign to ${lead.email.trim()}`}
             );
           `;
           await sql`UPDATE leads SET status = 'Follow Up' WHERE id = ${lead.id};`;

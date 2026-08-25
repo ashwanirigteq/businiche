@@ -40,15 +40,34 @@ function deobfuscateText(text: string): string {
 /**
  * Clean and validate phone number
  */
-function cleanPhoneNumber(rawPhone: string): string | null {
+function normalizeToE164(rawPhone: string): string | null {
+  if (!rawPhone) return null;
   const digits = rawPhone.replace(/\D/g, '');
-  // Ignore short numbers like +0110-0111 or dates/zipcodes
-  if (digits.length < 7 || digits.length > 15) return null;
-  // Ignore repeating patterns or obvious non-phones
-  if (/^(\d)\1+$/.test(digits)) return null;
 
-  const trimmed = rawPhone.trim().replace(/\s+/g, ' ');
-  return trimmed;
+  // Strictly require 8 to 15 digits
+  if (digits.length < 8 || digits.length > 15) return null;
+
+  // Filter out dates (e.g. 20260825, 20241231)
+  if (/^(19|20)\d{6}$/.test(digits) || /^(19|20)\d{2}(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])$/.test(digits)) return null;
+
+  // Filter out repeating/sequential/fake numbers
+  if (/^(\d)\1+$/.test(digits)) return null;
+  if ('123456789012345'.includes(digits) || '098765432109876'.includes(digits)) return null;
+  if (digits.includes('55501') || digits.includes('000000')) return null;
+
+  // Normalize to E.164 format (+XXXXXXXXXXX)
+  if (rawPhone.trim().startsWith('+')) {
+    return `+${digits}`;
+  } else if (digits.length === 10) {
+    // Default 10-digit North American number without + prefix -> +1
+    return `+1${digits}`;
+  } else if (digits.length >= 11 && (digits.startsWith('1') || digits.startsWith('44') || digits.startsWith('91') || digits.startsWith('33') || digits.startsWith('49'))) {
+    return `+${digits}`;
+  } else if (digits.length >= 8 && digits.length <= 15) {
+    return `+${digits}`;
+  }
+
+  return null;
 }
 
 function extractFromHtml(html: string): { emails: string[]; phones: string[] } {
@@ -78,7 +97,7 @@ function extractFromHtml(html: string): { emails: string[]; phones: string[] } {
   // 3. Extract phone numbers
   const phoneMatches = textContent.match(PHONE_REGEX) || [];
   for (const phone of phoneMatches) {
-    const validPhone = cleanPhoneNumber(phone);
+    const validPhone = normalizeToE164(phone);
     if (validPhone) {
       phones.add(validPhone);
     }
@@ -270,6 +289,27 @@ export async function POST(
     `;
 
     const totalFound = allFoundEmails.length + allFoundPhones.length;
+
+    // Log comment on lead enhancement
+    try {
+      const commentMsg = totalFound > 0
+        ? `Enhanced lead via website extraction: Found ${allFoundEmails.length} email(s) and ${allFoundPhones.length} phone number(s).`
+        : isTimedOut
+        ? `Enhanced lead via website extraction: Website connection timed out.`
+        : `Enhanced lead via website extraction: No additional contact details found.`;
+
+      await sql`
+        INSERT INTO comments (lead_id, user_id, status, comment_text)
+        VALUES (
+          ${id},
+          ${session.userId},
+          'Qualified',
+          ${commentMsg}
+        );
+      `;
+    } catch (logErr) {
+      console.error('Failed to log comment on enhance:', logErr);
+    }
 
     return NextResponse.json({
       success: true,

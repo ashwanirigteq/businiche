@@ -7,7 +7,7 @@ const secretKey = new TextEncoder().encode(JWT_SECRET);
 const SESSION_COOKIE_NAME = 'businiche_session';
 
 // Paths that do not require authentication
-const PUBLIC_PATHS = ['/login', '/signup', '/api/auth/login', '/api/auth/signup'];
+const PUBLIC_PATHS = ['/login', '/signup', '/api/auth/login', '/api/auth/signup', '/api/auth/otp'];
 
 // Admin-only paths
 const ADMIN_PATHS = ['/users', '/api/users'];
@@ -64,8 +64,11 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  // 4. Admin-only route authorization check
-  const isAdminPath = ADMIN_PATHS.some((path) => pathname === path || pathname.startsWith(path + '/'));
+  // 4. Admin-only route authorization check (exclude /api/users/profile)
+  const isAdminPath =
+    pathname !== '/api/users/profile' &&
+    ADMIN_PATHS.some((path) => pathname === path || pathname.startsWith(path + '/'));
+
   if (isAdminPath && sessionPayload.role !== 'Admin') {
     if (pathname.startsWith('/api/')) {
       return NextResponse.json(

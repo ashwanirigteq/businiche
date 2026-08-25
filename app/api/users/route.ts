@@ -59,7 +59,7 @@ export async function POST(request: Request) {
     const cleanUsername = String(username).trim().toLowerCase();
     const rawPassword = String(password);
     const selectedRole: UserRole = role === 'Admin' ? 'Admin' : 'User';
-    const initialCredits = Number(credits) >= 0 ? Number(credits) : 1000;
+    const initialCredits = Number(credits) >= 0 ? Number(credits) : 10000;
 
     if (cleanFullName.length < 2) return NextResponse.json({ error: 'Full name min 2 chars.' }, { status: 400 });
     if (cleanUsername.length < 3) return NextResponse.json({ error: 'Username min 3 chars.' }, { status: 400 });
