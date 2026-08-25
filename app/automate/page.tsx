@@ -30,7 +30,7 @@ import {
 } from 'lucide-react';
 import type { Campaign, CampaignStatus, EmailFormat, StateItem, UserRole } from '@/lib/types';
 
-export default function AutomatePage() {
+function AutomatePageContent() {
   const searchParams = useSearchParams();
   const urlFilterParam = searchParams.get('filter');
 
@@ -1078,5 +1078,19 @@ export default function AutomatePage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function AutomatePage() {
+  return (
+    <React.Suspense
+      fallback={
+        <div className="min-h-screen bg-slate-50 flex items-center justify-center p-8 text-xs text-slate-400 font-semibold">
+          Loading Campaign Engine...
+        </div>
+      }
+    >
+      <AutomatePageContent />
+    </React.Suspense>
   );
 }
